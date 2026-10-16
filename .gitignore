@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/data/
+dist/
+*.tmp
+*.user
+*.zip
+*.tar.gz

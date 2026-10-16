@@ -1,0 +1,95 @@
+# KeranStrat
+
+**CS2 战术录制与 BOT 同步回放插件 · Keran Technology**
+
+一个人录制整套团队战术，让对应数量的 BOT 在同一条时间轴上执行。支持 1～5 名队员、独立重录、延迟启动与本地战术库，无需客户端 Mod、数据库或网页后台。
+
+## 功能
+
+- **自由编组**：录制 1～5 名队员，也可以只使用 1、3、5 等非连续编号；回放只生成已录制队员的 BOT。
+- **原生动作录制**：基于 CS2-Bot-Controller，保存移动、视角、按钮、武器、Subtick 和命令帧数据，通过原生命令路径回放。
+- **同步与错峰执行**：统一服务器 Tick 时间轴，支持每名队员单独设置启动偏移，也可以单独回放一个队员。
+- **独立编辑**：重录、移除或补录单个队员，保留其他轨迹；支持设置起点、复制战术和重复播放。
+- **战术库**：按地图保存、加载、列出、复制和删除战术，使用原子文件写入及容量限制。
+- **一键训练**：进入训练环境、补齐武器和投掷物、切换地图；退出时自动保存、清理 BOT，并恢复 Dust2 死斗。
+- **SteamID64 白名单**：所有游戏指令统一鉴权，支持配置热重载，不依赖 CSSharp 管理员权限。
+- **轻量部署**：插件本地存储，无数据库、Web 服务或客户端插件依赖。
+
+## 安装
+
+运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
+
+1. 在 Releases 下载 `KeranStrat-v0.2.0-linux-x64.zip`。
+2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
+3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
+4. 启动服务器，进服后输入 `!ks` 查看帮助。
+
+默认白名单为空。升级时保留已有配置和插件 `data/` 目录，不要用默认模板覆盖自己的白名单。
+
+详见 [安装与构建](INSTALL.md)、[配置说明](CONFIGURATION.md)。
+
+## 快速使用
+
+```text
+!ks practice
+!ks kit
+!ks new B区进攻
+!ks record 1
+!ks stop
+!ks record 3
+!ks stop
+!ks offset 3 1500
+!ks save
+!ks play
+!ks exit
+```
+
+进入训练后先选择 T/CT 并出生。`record` 倒计时结束后开始录制，`stop` 结束当前轨迹。上例生成两名 BOT，3 号比 1 号晚 1.5 秒启动。
+
+新角色使用当前战术起点；需要调整时，走到目标位置执行 `!ks anchor`。重录已有队员会恢复该队员自己的起点。编辑后使用 `!ks save` 持久保存；切图和退出训练会自动保存。
+
+训练模式切换会提示全服并重新加载地图。服务器平时的 Dust2 死斗启动配置保持不变。
+
+## 指令
+
+所有游戏内指令均需 SteamID64 白名单授权。
+
+| 指令 | 功能 |
+|---|---|
+| `!ks` | 查看帮助 |
+| `!ks practice` | 进入训练模式 |
+| `!ks exit` | 保存并恢复 Dust2 死斗 |
+| `!ks map <地图>` | 切换训练地图，如 de_mirage、de_inferno、de_dust2 |
+| `!ks kit` | 补齐本队武器、护甲和投掷物 |
+| `!ks new <名称>` | 新建战术 |
+| `!ks anchor` | 设置当前起点 |
+| `!ks record <1-5>` | 录制或重录队员 |
+| `!ks stop` | 结束录制 |
+| `!ks play` | 回放全部有效队员 |
+| `!ks replay <1-5>` | 单独回放队员 |
+| `!ks offset <1-5> <毫秒>` | 设置启动延迟 |
+| `!ks remove <1-5>` | 移除队员轨迹 |
+| `!ks save` | 保存当前战术 |
+| `!ks load <名称或ID>` | 加载战术 |
+| `!ks list` | 查看战术列表 |
+| `!ks copy <新名称>` | 复制当前战术 |
+| `!ks delete <名称或ID>` | 删除战术 |
+| `!ks reset` | 停止回放并返回起点 |
+| `!ks cancel` | 取消当前操作 |
+| `!ks status` | 查看状态 |
+| `!ks reload` | 重新加载配置 |
+| `!ks source` | 获取源代码地址 |
+
+## 源码与构建
+
+使用 .NET 10 SDK：
+
+```bash
+bash scripts/build.sh
+```
+
+仓库附带配套引用程序集与第三方源码，不需要在线 NuGet 依赖。也可设置 `CSS_ROOT` 使用目标服务器的引用程序集。架构与存储格式见 [ARCHITECTURE.md](ARCHITECTURE.md)。
+
+## 开源许可与致谢
+
+KeranStrat 采用 [AGPL-3.0-only](LICENSE)。原生录制引擎来自 [XBribo/CS2-Bot-Controller](https://github.com/XBribo/CS2-Bot-Controller)，服务器插件框架来自 [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)。第三方作者、许可证及源码保留在 [THIRD_PARTY.md](THIRD_PARTY.md) 和 `third_party/`。

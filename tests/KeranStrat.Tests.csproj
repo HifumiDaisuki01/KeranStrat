@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../src/KeranStrat.Core/KeranStrat.Core.csproj" />
+    <Reference Include="BotControllerApi"><HintPath>../refs/BotControllerApi.dll</HintPath><Private>true</Private></Reference>
+  </ItemGroup>
+</Project>

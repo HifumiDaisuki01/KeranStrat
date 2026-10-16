@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><AssemblyName>KeranStrat</AssemblyName><EnableDynamicLoading>true</EnableDynamicLoading></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../KeranStrat.Core/KeranStrat.Core.csproj" />
+    <Reference Include="CounterStrikeSharp.API"><HintPath>../../refs/CounterStrikeSharp.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BotControllerApi"><HintPath>../../refs/BotControllerApi.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>../../refs/Microsoft.Extensions.Logging.Abstractions.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+{
+  "ConfigVersion": 1,
+  "Enabled": true,
+  "AllowedSteamIDs": [],
+  "DefaultMap": "de_dust2",
+  "DefaultGameMode": "deathmatch",
+  "MaxRecordedPlayers": 5,
+  "AdminFlag": "@css/root",
+  "DataDirectory": "data",
+  "CountdownSeconds": 3,
+  "MaxRecordingSeconds": 180,
+  "MaxTacticsPerMap": 100,
+  "MaxFileMegabytes": 64,
+  "MaxStorageMegabytes": 256,
+  "SourceUrl": "https://github.com/HifumiDaisuki01/KeranStrat"
+}

@@ -1,0 +1,9 @@
+CounterStrikeSharp is licensed under the GNU General Public License, version 3. 
+
+As a special exception to the GNU General Public License 3.0, the license holder
+permits licensing of DERIVATIVE WORKS ONLY (that is, 
+CounterStrikeSharp plugins and extensions, or any software built 
+referencing published .NET packages) under the MIT license.
+
+A copy of the GNU General Public License 3.0 is available in LICENSE.GPL3
+A copy of the MIT License is available in LICENSE.MIT

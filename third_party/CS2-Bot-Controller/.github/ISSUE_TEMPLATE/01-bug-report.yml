@@ -1,0 +1,77 @@
+name: Bug report
+description: Report a problem with the plugin or bot behavior
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve CS2-Bot-Controller.
+
+        Please report only one problem per issue and check existing issues before submitting.
+
+  - type: dropdown
+    id: server-operating-system
+    attributes:
+      label: CS2 server operating system
+      description: Select the operating system of the machine running the CS2 server. For a local game hosted from the CS2 client, use the host computer's operating system, not a connecting player's.
+      options:
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: host-type
+    attributes:
+      label: How is the CS2 game server hosted?
+      description: Select whether the game is hosted by a CS2 client or runs as a dedicated server.
+      options:
+        - Listen server hosted by a CS2 client
+        - Dedicated server
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem, where it happened, and how often it occurs.
+      placeholder: |
+        Example:
+        - Map or game mode:
+        - What the bot did:
+        - What you expected:
+        - Does it happen every time or only sometimes?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: problem-origin
+    attributes:
+      label: Does the problem also happen when BotController is disabled?
+      description: If possible, reproduce the same situation once with BotController disabled. Choose "I have not tested this or I am not sure" if you cannot check.
+      options:
+        - Yes, it also happens with BotController disabled
+        - No, it only happens with BotController enabled
+        - I have not tested this or I am not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: BotController log
+      description: Optional. Paste the relevant log output here. Log files are in `game\csgo\addons\BotController\logs`. If the log is too long, attach the complete log file and paste the relevant section.
+      placeholder: Paste the relevant BotController log output here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Additional screenshots or video
+      description: Optional. Attach anything else that makes the problem easier to understand or reproduce.
+    validations:
+      required: false

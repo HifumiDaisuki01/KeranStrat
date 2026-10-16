@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><AssemblyName>KeranStrat.BotControllerBridge</AssemblyName><EnableDynamicLoading>true</EnableDynamicLoading></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="CounterStrikeSharp.API"><HintPath>../../refs/CounterStrikeSharp.API.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="BotControllerApi"><HintPath>../../refs/BotControllerApi.dll</HintPath><Private>false</Private></Reference>
+    <Compile Include="../../third_party/CS2-Bot-Controller/csharp/BotControllerImpl/BotController.NativeApi.cs" Link="Upstream/NativeApi.cs" />
+    <Compile Include="../../third_party/CS2-Bot-Controller/csharp/BotControllerImpl/BotControllerApiImpl.cs" Link="Upstream/ApiImpl.cs" />
+  </ItemGroup>
+</Project>
