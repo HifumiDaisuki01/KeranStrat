@@ -1,4 +1,10 @@
-# Versus 与彩色观察验证（0.5.0）
+# Versus 与彩色观察验证（0.5.1）
+
+0.5.1 修复 KSV 轮间保持锁定后清理 BOT 的显式解锁。基于 0.5.0 的完整回归，补丁重新执行双阵营七场景、Strict 真实射击和循环测试，新增 NativeLocksReleased=true 的原生锁释放断言；KS/Defense 未修改，沿用下述 0.5.0 同轮回归记录。补丁再次构建零警告零错误，45 项独立检查通过。
+
+补丁报告：2026-10-17T16:28:22Z，Hybrid 原生枪伤 2021、Strict 枪伤 111、真实击杀 16、27 对轮廓实体创建及清理；NativeLocksReleased=true。汇总 /root/keranstrat-work/v051-verification.json。已有 8 份数据及所有既有配置字段仍保持不变，最终恢复 Deathmatch。
+
+## 0.5.0 完整功能与回归基线
 
 基线 main：5b3cedd8f985f7bf89397627eaa3f00dc2f0b603。测试时间：2026-10-17 UTC。目标为 Debian 12 x86_64、CS2 1.41.9.1 / ServerVersion 2000933、CounterStrikeSharp 1.0.376 / .NET 10、原生 BotController 0.7.2 / ABI 22。
 

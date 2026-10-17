@@ -13,6 +13,7 @@ public sealed partial class KeranStratPlugin
     private int _versusTestPhase, _versusTestAt, _versusTestDeadline, _versusTestCase, _versusTestSeen, _versusTestSettle;
     private int _versusTestAiDamage, _versusTestStrictDamage, _versusTestKills, _versusTestGlows;
     private readonly List<VersusBot> _versusFixtures = [];
+    private readonly HashSet<int> _versusTestSlots = [];
     private readonly Dictionary<int, long> _versusFixtureMovement = [];
     private Track? _versusFixtureT, _versusFixtureCT, _versusFixtureStrict;
     private Dictionary<string, string> _versusTestCvars = [];
@@ -47,7 +48,7 @@ public sealed partial class KeranStratPlugin
         _versusTestPhase = 1; _versusTestCase = 0; _versusTestSeen = _versusRounds; _versusTestSettle = 0;
         _versusTestDeadline = Server.TickCount + DefenseTicks(240000);
         _versusTestAiDamage = 0; _versusTestStrictDamage = 0; _versusTestKills = 0; _versusTestGlows = 0;
-        _versusTestCases.Clear(); _versusFixtures.Clear(); _versusFixtureMovement.Clear(); _versusTestGlowChecked = false;
+        _versusTestCases.Clear(); _versusFixtures.Clear(); _versusTestSlots.Clear(); _versusFixtureMovement.Clear(); _versusTestGlowChecked = false;
         _versusTestCvars = VersusScopedCvars.ToDictionary(k => k, k => ConVar.Find(k)!.StringValue);
         _versusTestDirectory = Path.Combine(_dataRoot, "versus-diagnostics", Guid.NewGuid().ToString("N"));
         foreach (string cmd in new[] { "bot_dont_shoot 0", "bot_stop 0", "bot_zombie 0", "bot_difficulty 3", "mp_respawn_on_death_ct 0", "mp_respawn_on_death_t 0", "mp_respawn_immunitytime 0", "bot_add_t", "bot_add_ct", "bot_quota 2" }) Server.ExecuteCommand(cmd);
@@ -141,6 +142,7 @@ public sealed partial class KeranStratPlugin
                 ConfigureVersusTestCase(); _versusTestPhase = 5; return;
             }
             if (_versusTestPhase != 5) return;
+            foreach (var b in _versusBots.Values) _versusTestSlots.Add(b.Slot);
             if (_versusState == "preparing" && _versusBots.Count == _versusScene!.Tracks.Count && !_versusTestGlowChecked)
             {
                 _xrayVersus = true;
@@ -170,9 +172,11 @@ public sealed partial class KeranStratPlugin
             _versusTestCase++;
             if (_versusTestCase <= 5) { ConfigureVersusTestCase(); return; }
             if (_versusTestAiDamage < 1 || _versusTestKills < 1 || _versusTestStrictDamage < 1 || _xray.Count != 0) throw new InvalidOperationException("未确认原生 AI、严格回放真实枪伤、击杀或轮廓清理。");
+            if (_versusTestSlots.Any(slot => _api!.IsLocked(slot, LockKind.All) || _api.IsLocked(slot, LockKind.Aim) || _api.GetWeaponLock(slot) != LockTarget.None))
+                throw new InvalidOperationException("KSV BOT 清理后仍残留原生锁。");
             var result = new { Result = "PASS_VERSUS_SERVER_AUTOMATION", Cases = _versusTestCases, NativeAIGunDamage = _versusTestAiDamage,
                 StrictReplayGunDamage = _versusTestStrictDamage, ActualKillEvents = _versusTestKills, GlowPairsCreatedAndRemoved = _versusTestGlows,
-                HumanClientRendered = false, ClientVisibilityIsolationTested = false, TimeUtc = DateTimeOffset.UtcNow };
+                NativeLocksReleased = true, HumanClientRendered = false, ClientVisibilityIsolationTested = false, TimeUtc = DateTimeOffset.UtcNow };
             File.WriteAllText(Path.Combine(_dataRoot, "versus-selftest-report.json"), JsonSerializer.Serialize(result));
             Log(JsonSerializer.Serialize(result)); EndVersusTest();
         }

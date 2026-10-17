@@ -118,7 +118,14 @@ public sealed partial class KeranStratPlugin
             foreach (var p in Utilities.GetPlayers().Where(p => p.IsValid && p.IsBot && p.UserId != null && !_versusSpawnBaseline.Contains(p.EntityHandle.Raw)).Take(_versusScene.Tracks.Count - _versusBots.Count))
                 _versusRetiring[p.EntityHandle.Raw] = new("pending", p.Slot, p.UserId!.Value, p.EntityHandle.Raw);
         foreach (var b in _versusBots.Values) _versusRetiring[b.Serial] = b;
-        foreach (var b in _versusRetiring.Values) if (VersusResolve(b) is { } p) Server.ExecuteCommand("kickid " + p.UserId!.Value);
+        foreach (var b in _versusRetiring.Values) if (VersusResolve(b) is { } p)
+        {
+            // Finish locks survivors after coordinator ownership has been released.
+            // Explicitly release that hold before kicking, while identity is still valid.
+            _api?.StopReplay(p.Slot);
+            _api?.Unlock(p.Slot, LockKind.All); _api?.Unlock(p.Slot, LockKind.Aim); _api?.Unlock(p.Slot, LockKind.Weapon);
+            Server.ExecuteCommand("kickid " + p.UserId!.Value);
+        }
         if (_versusCvars != null) Server.ExecuteCommand("bot_quota " + Utilities.GetPlayers().Count(p => p.IsValid && p.IsBot && !_versusRetiring.ContainsKey(p.EntityHandle.Raw)));
         foreach (var (handle, name) in _versusTemporary)
         {
