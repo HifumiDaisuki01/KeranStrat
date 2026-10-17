@@ -12,6 +12,7 @@ public sealed partial class KeranStratPlugin
     private int _hudNextTick;
     private int _hudUntil;
     private string _hudText = "";
+    private bool _hudVisible;
 
     private static string Duration(double seconds)
     {
@@ -27,22 +28,36 @@ public sealed partial class KeranStratPlugin
     private void RecordingHudTick()
     {
         bool active = _state is "recording" or "countdown";
-        if ((!active && Server.TickCount >= _hudUntil) || Server.TickCount < _hudNextTick) return;
+        if (!active && Server.TickCount >= _hudUntil) { ClearRecordingHud(); return; }
         var player = NativeReplayEngine.Player(_ownerSlot);
         if (player is not { IsValid: true, IsBot: false } || player.SteamID != _owner) return;
-        string text = _hudText;
-        if (_state == "countdown" && _recording != null)
-            text = $"<font color='#FFD166'>准备录制 {_recording.Role} 号 · {Math.Max(1, (int)Math.Ceiling((_countdownAt - Server.TickCount) * Server.TickInterval))}</font>";
-        else if (_state == "recording" && _recording != null)
-            text = $"<font color='#FF6666'>● 正在录制 {_recording.Role} 号</font><br>{Duration((Server.TickCount - _recordStart) * Server.TickInterval)} / {Duration(Config.MaxRecordingSeconds)}<br><font color='#AAAAAA'>快捷停止：绑定 mouse3 → css_ks_stop</font>";
-        player.PrintToCenterHtml(text);
-        _hudNextTick = Server.TickCount + ReplayCoordinator.ToTicks(100, Server.TickInterval);
+        if (Server.TickCount >= _hudNextTick)
+        {
+            if (_state == "countdown")
+                _hudText = Duration((_countdownAt - Server.TickCount) * Server.TickInterval);
+            else if (_state == "recording")
+                _hudText = Duration((Server.TickCount - _recordStart) * Server.TickInterval);
+            _hudNextTick = Server.TickCount + ReplayCoordinator.ToTicks(100, Server.TickInterval);
+        }
+        // The game's HTML panel needs continuous drawing, as in CSS's CenterHtmlMenu.
+        // Cache the time at 10 Hz, but keep the panel alive every tick to avoid fade/re-entry flashes.
+        string color = _state == "countdown" ? "#FFD166" : _state == "recording" ? "#FF6666" : "#80ED99";
+        player.PrintToCenterHtml($"<font color='{color}'>{_hudText}</font>", 1);
+        _hudVisible = true;
     }
     private void RecordingFinishedHud(int role, int frames)
     {
         _lastRecordedRole = role;
-        _hudText = $"<font color='#80ED99'>已停止录制 {role} 号 · {Duration(frames * Server.TickInterval)}</font>";
-        _hudUntil = Server.TickCount + ReplayCoordinator.ToTicks(3000, Server.TickInterval);
+        _hudText = Duration(frames * Server.TickInterval);
+        _hudUntil = Server.TickCount + ReplayCoordinator.ToTicks(1000, Server.TickInterval);
         _hudNextTick = 0;
+    }
+    private void ClearRecordingHud()
+    {
+        if (!_hudVisible) return;
+        _hudVisible = false;
+        var player = NativeReplayEngine.Player(_ownerSlot);
+        if (player is { IsValid: true, IsBot: false } && player.SteamID == _owner)
+            player.PrintToCenterHtml(" ", 1);
     }
 }

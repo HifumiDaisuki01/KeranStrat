@@ -102,7 +102,7 @@ public sealed partial class KeranStratPlugin
     private void TrainingMapStarted(string map)
     {
         _tactic = null; _anchor = null;
-        _lastRecordedRole = 0; _hudUntil = 0; _hudNextTick = 0; _trainingSetupIssued = false;
+        _lastRecordedRole = 0; _hudUntil = 0; _hudNextTick = 0; _hudVisible = false; _trainingSetupIssued = false;
         if (_modeChanging)
         {
             _targetMapStarted = map == _targetMap;

@@ -19,7 +19,7 @@
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.2.2-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.2.3-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。
@@ -54,7 +54,7 @@
 
 ## 录制计时与快捷停止
 
-录制时，屏幕中央下方显示队员编号、倒计时和已经过的时间。结束后显示本段录制时长。
+录制 HUD 仅显示单行时间，保留原字体与阶段颜色：倒计时黄色、录制红色、结束绿色。持续绘制避免间歇闪烁，停止后保留一秒再消失。
 
 在客户端控制台执行一次，即可用鼠标中键停止录制，无须打开聊天框：
 

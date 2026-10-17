@@ -34,7 +34,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.2.2";
+    public override string ModuleVersion => "0.2.3";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -490,6 +490,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     }
     private void Abort(string reason, bool exitPractice)
     {
+        try { ClearRecordingHud(); } catch (InvalidOperationException) { /* player disconnected */ }
         _hudUntil = 0; _hudNextTick = 0;
         _generation++; _busy = false;
         try { if (_state == "recording") _api?.StopRecord(_ownerSlot); } catch (Exception e) { Log("停止录制: " + e.Message); }
