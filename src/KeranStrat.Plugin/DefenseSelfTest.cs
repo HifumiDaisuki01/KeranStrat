@@ -23,7 +23,7 @@ public sealed partial class KeranStratPlugin
 
     private void StartDefenseSelfTest(CCSPlayerController? p, CommandInfo cmd)
     {
-        if (p != null || OtherHumans(0) || Utilities.GetPlayers().Any(b => b.IsValid && b.IsBot) || DefenseBusy || _defenseTestPhase != 0 ||
+        if (p != null || OtherHumans(0) || Utilities.GetPlayers().Any(b => b.IsValid && b.IsBot) || DefenseLease || _defenseTestPhase != 0 || _coopTestPhase != 0 ||
             _state != "idle" || _busy || _modeChanging || Server.MapName != "de_dust2" || _trainingMode != "Practice" || !_practice.Active || !Config.DefenseEnabled || !Bind())
             throw new InvalidOperationException("Defense 自测仅空服服务端控制台可用。");
         _defenseTestPhase = 1; _defenseTestDeadline = Server.TickCount + DefenseTicks(180000);
@@ -138,7 +138,7 @@ public sealed partial class KeranStratPlugin
     private void EndDefenseSelfTest()
     {
         if (_defenseTestPhase == 0) return;
-        _defenseTestPhase = 0; StopDefenseProbe(); StopDefense("自测结束");
+        StopDefenseProbe(); CloseDefense("自测结束"); _defenseTestPhase = 0;
         if (_defenseTestTarget is { IsValid: true, IsBot: true } p)
         { _api?.Unlock(p.Slot, LockKind.All); if (p.UserId is int id) Server.ExecuteCommand("kickid " + id); }
         Server.ExecuteCommand("bot_quota 0");

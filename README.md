@@ -17,7 +17,7 @@
 
 ## KeranStrat Defense
 
-独立的 `!ksd` 防守训练：CT 加载已有 T 方战术，1～5 个 T BOT 先按录制执行爆弹，再独立交接原生战斗 AI，主动交火并自动进行下一轮。支持防守位置和配装恢复、难度、局部交接时间、成功／失败／超时统计及循环开关。
+独立的 `!ksd` 防守训练：1～5 名真人 CT 协同对抗 1～5 个 T BOT。进攻方先按已有录制执行爆弹，再独立交接原生战斗 AI。每名 CT 独立保存位置和配装，一人阵亡后队友继续防守，全队共享成功／失败／超时／平局统计并自动重置下一轮。
 
 Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权限；不会改写战术文件，原版 `!ks play` 继续保持纯轨迹回放。
 
@@ -29,13 +29,15 @@ Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权�
 !ksd start
 ```
 
+朋友同样需要 Defense 白名单权限，在 CT 队执行 `!ksd join`、`!ksd position`。房主用 `!ksd team` 检查准备状态，再启动训练。`!ksd stop` 保留队伍和 Practice；`!ksd close` 解散队伍；`!ksd exit` 恢复死斗。
+
 [Defense 使用与配置](DEFENSE.md) · [Defense 测试记录](DEFENSE_TEST_REPORT.md)
 
 ## 安装
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.3.1-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.4.0-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。

@@ -30,14 +30,20 @@
 ## Defense 模块
 
 - Core/Defense.cs：独立 DefenseBotController、每 BOT Waiting/Replaying/CombatAI/Dead 状态、本地交接时间校验、成绩与场景模型。
+- Core/DefenseSession.cs：稳定房主、明确加入的最多五名 CT、独立本轮名单、延迟退出和持续死亡状态；身份包含认证 SteamID64、Slot、UserId 和实体序列号。
+- DefenseParticipants.cs：成员身份核对、队伍查询、断线／阵营／授权变化处理。可信空服诊断使用内部 BOT 身份，不接受客户端自报身份。
 - DefenseCommands.cs：独立 css_ksd 入口、DefenseEnabled/DefenseAllowedSteamIDs 统一鉴权、只读异步加载、每玩家场景 JSON 持久化。
 - DefenseManager.cs：Defense 回合生命周期、CT 重置、T BOT 身份绑定、三秒倒计时、判定、循环、临时 ConVar 快照和实体清理。
-- DefenseProbe.cs / DefenseSelfTest.cs：仅空服控制台使用的原生交火与循环验证。
+- DefenseProbe.cs / DefenseSelfTest.cs / DefenseCoopTest.cs：仅空服控制台使用的原生交火、单人回归和多人矩阵／十轮循环验证。
 
-原版 _state/_busy/切图标志和 DefenseBusy 构成轻量互斥；Defense 加载或训练期间拒绝原版世界操作，原版操作期间拒绝 Defense。双方共享 PracticeEnvironment 与模式底层，各自保存战术/状态，普通原版命令不会获得 Defense 权限。显式退出和全局地图卸载负责共同停止。
+原版 _state/_busy/切图标志和 DefenseLease 构成轻量互斥；Defense 会话从成功加载到解散保持房主归属，stop 仅停止回合，close 才释放会话。原版操作期间拒绝 Defense，Defense 会话期间拒绝原版世界操作；房主可用原版 exit 显式退出，普通成员不能绕过房主切图。双方共享 PracticeEnvironment 与模式底层，普通原版命令不会获得 Defense 权限。
+
+回合状态为 idle → cleaning → respawning → restoring → preparing → running → between。清理阶段等待本模式旧 BOT 的 UserId／序列号身份真正离开，防止异步 kick 与 quota 调整影响新一轮；地图开始时清空上一地图的待断开记录。每轮仅发起一次复活请求，等待全部身份一致的 Pawn 就绪后分别恢复位置和配装，再创建 T BOT。死亡状态在本轮内保持，死亡事件及统一 Tick 采样共同更新；只按本轮有效成员计算胜负。所有等待使用 TickInterval 和明确截止时间。朋友断线只移除自身，房主断线解散整个会话；断线和无人可训练不记作击杀或失败。
+
+CT/T 死亡事件均归并到本轮状态；出现全灭候选时延迟到下一 Tick 再统一确认，避免事件先后与 Pawn 状态刷新造成提前判负。超时按时限采样结算。单人旧 Evaluate 接口保留，新会话使用 EvaluateTeam 并单独记录 Draw。
 
 NativeReplayEngine.HandoffToCombatAI 顺序为 StopReplay（清除回放状态和 Pawn 注入绑定）→ Unlock All/Aim/Weapon → 核对状态；不移除实体所有权。上游 CCSBot::Update/Upkeep/UpdateLookAngles 在回放或相应锁存在时跳过原生更新，释放后恢复。最终回合清理才 Stop 并按控制器身份和 UserId 踢出 BOT。
 
-DefenseBotController 使用独立策略：死亡是正常事件；控制器断线、加载失败和提前终止为故障；交接不结束本轮，所有 BOT 消灭、CT 死亡或超时才结束。本地交接 Tick 与每角色 OffsetTicks 分开，所有启动和交接由一个 OnTick 推进。原版 ReplayCoordinator 无交接行为。
+DefenseBotController 使用独立策略：死亡是正常事件；控制器断线、加载失败和提前终止为故障；交接不结束本轮，所有 BOT 消灭、全体有效 CT 死亡或超时才结束；同时全灭记为平局。本地交接 Tick 与每角色 OffsetTicks 分开，所有启动和交接由一个 OnTick 推进。原版 ReplayCoordinator 无交接行为。
 
 临时实体每200ms追踪，使用带序列号的实体句柄及参与者归属，防止重用指针误删。场景文件与原 .ks 分离；代际标记阻止过期后台加载覆盖换图/取消后的状态。Defense 的参数恢复先于 Practice 恢复，避免异常重启后把练习值当作最终正常值。

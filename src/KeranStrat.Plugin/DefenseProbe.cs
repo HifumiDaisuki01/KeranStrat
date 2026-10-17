@@ -12,6 +12,7 @@ public sealed partial class KeranStratPlugin
 {
     private Pose? _probeTargetPose;
     private string _probeWeapon = "";
+    private readonly List<string> _probeEvents = [];
     private int _probePhase, _probeDeadline, _probeAt, _probeShots, _probeDamage;
     private CCSPlayerController? _probeT, _probeCT;
     private Track? _probeTrack;
@@ -19,18 +20,25 @@ public sealed partial class KeranStratPlugin
     private readonly HashSet<int> _probeBaseline = [];
     private readonly Dictionary<int, nint> _probeOwned = [];
     private Dictionary<string, string>? _probeCvars;
+    private static bool ProbeFirearm(string weapon)
+    {
+        string name = weapon.StartsWith("weapon_", StringComparison.Ordinal) ? weapon : "weapon_" + weapon;
+        return PrimaryWeapons.Contains(name) || name is "weapon_glock" or "weapon_usp_silencer" or "weapon_hkp2000" or "weapon_deagle" or "weapon_revolver" or "weapon_p250" or "weapon_fiveseven" or "weapon_tec9" or "weapon_cz75a" or "weapon_elite";
+    }
 
     private void RegisterDefenseProbe()
     {
         AddCommand("css_ksd_probe", "Console-only empty-server native combat handoff verification", StartDefenseProbe);
         RegisterEventHandler<EventWeaponFire>((e, _) =>
         {
-            if (_probePhase == 4 && e.Userid?.Handle == _probeT?.Handle && e.Weapon is "ak47" or "weapon_ak47") { _probeShots++; _probeWeapon = e.Weapon; }
+            if (_probePhase == 4 && e.Userid?.Handle == _probeT?.Handle && _probeEvents.Count < 16) _probeEvents.Add("fire:" + e.Weapon);
+            if (_probePhase == 4 && e.Userid?.Handle == _probeT?.Handle && ProbeFirearm(e.Weapon)) { _probeShots++; _probeWeapon = e.Weapon; }
             return HookResult.Continue;
         });
         RegisterEventHandler<EventPlayerHurt>((e, _) =>
         {
-            if (_probePhase == 4 && e.Attacker?.Handle == _probeT?.Handle && e.Userid?.Handle == _probeCT?.Handle && e.Weapon is "ak47" or "weapon_ak47")
+            if (_probePhase == 4 && e.Userid?.Handle == _probeCT?.Handle && _probeEvents.Count < 16) _probeEvents.Add($"hurt:{e.Weapon}:{e.DmgHealth}:attacker={e.Attacker?.Slot}");
+            if (_probePhase == 4 && e.Attacker?.Handle == _probeT?.Handle && e.Userid?.Handle == _probeCT?.Handle && ProbeFirearm(e.Weapon))
                 _probeDamage += e.DmgHealth;
             return HookResult.Continue;
         });
@@ -52,6 +60,7 @@ public sealed partial class KeranStratPlugin
         _probeBaseline.Clear(); _probeOwned.Clear();
         foreach (var p in Utilities.GetPlayers()) if (p.UserId is int id) _probeBaseline.Add(id);
         _probeT = null; _probeCT = null; _probeShots = 0; _probeDamage = 0; _probeTargetPose = null; _probeWeapon = "";
+        _probeEvents.Clear();
         _probePhase = 1; _state = "combat-probe"; _probeDeadline = Server.TickCount + 64 * 60;
         Server.ExecuteCommand("bot_dont_shoot 0"); Server.ExecuteCommand("bot_difficulty 3");
         Server.ExecuteCommand("bot_stop 0"); Server.ExecuteCommand("bot_zombie 0");
@@ -64,6 +73,8 @@ public sealed partial class KeranStratPlugin
         try
         {
             if (OtherHumans(0)) throw new InvalidOperationException("Human joined; probe stopped.");
+            if (_probeT is { IsValid: true }) DefenseBotFunds(_probeT);
+            if (_probeCT is { IsValid: true }) DefenseBotFunds(_probeCT);
             if (Server.TickCount > _probeDeadline) throw new TimeoutException("Native AI did not damage CT within deadline.");
             if (_probePhase == 1)
             {
@@ -80,13 +91,11 @@ public sealed partial class KeranStratPlugin
                 var rifle = Inventory.Capture(_probeT, 1);
                 rifle.Equipment = rifle.Equipment.Where(e => e.ClassName == "weapon_ak47").ToArray();
                 rifle.Ammo = []; Inventory.Restore(_probeT, rifle);
-                var origin = _probeT.PlayerPawn.Value!.AbsOrigin!;
-                // Use the actual spawned pawn: map spawn-point entities may be removed by the engine.
-                float yaw = Inventory.Capture(_probeT, 1).Initial.Yaw;
-                double angle = yaw * Math.PI / 180;
-                var adjacent = new Pose(origin.X + (float)Math.Cos(angle) * 128, origin.Y + (float)Math.Sin(angle) * 128, origin.Z + 2, 0, yaw + 180, 0);
-                Inventory.RestorePose(_probeT, new Pose(origin.X, origin.Y, origin.Z, 0, yaw, 0));
-                _probeTargetPose = adjacent with { Yaw = yaw + 180 };
+                DefenseBotFunds(_probeT); DefenseBotFunds(_probeCT);
+                // Diagnostic-only Dust2 fixture, based on a verified open native spawn-area pair.
+                // Random spawns can put the target behind props or below a ramp.
+                Inventory.RestorePose(_probeT, new Pose(-1181, -754, 121, 0, 0, 0));
+                _probeTargetPose = new Pose(-1053, -754, 121, 0, 180, 0);
                 _api!.Lock(_probeT.Slot, LockKind.All);
                 _probeTrack = Inventory.Capture(_probeT, 1);
                 _api!.Lock(_probeCT.Slot, LockKind.All);
@@ -125,7 +134,7 @@ public sealed partial class KeranStratPlugin
     }
     private void WriteProbeReport(string result)
     {
-        var report = new { Result = result, Shots = _probeShots, Damage = _probeDamage, Weapon = _probeWeapon, TargetHealth = _probeCT?.PlayerPawn.Value?.Health,
+        var report = new { Result = result, Shots = _probeShots, Damage = _probeDamage, Weapon = _probeWeapon, Events = _probeEvents.ToArray(), TargetHealth = _probeCT?.PlayerPawn.Value?.Health,
             AttackerPosition = _probeT?.PlayerPawn.Value?.AbsOrigin?.ToString(), TargetPosition = _probeCT?.PlayerPawn.Value?.AbsOrigin?.ToString(),
             Frames = _probeTrack?.Ticks.Length, ReplayStopped = _probeT == null || !_api!.IsReplaying(_probeT.Slot),
             AllLockReleased = _probeT == null || !_api!.IsLocked(_probeT.Slot, LockKind.All), TimeUtc = DateTimeOffset.UtcNow };

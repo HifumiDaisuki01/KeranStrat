@@ -23,6 +23,8 @@ public sealed class DefenseBotEntry(int role, int slot, int offsetTicks, int tot
 // Separate policy from strict replay: deaths are normal, AI handoff retains ownership.
 public sealed class DefenseBotController(IDefenseReplayEngine engine)
 {
+    private readonly HashSet<int> _deathEvents = [];
+    public void MarkDead(int slot) { if (Active && Entries.Any(e => e.Slot == slot)) _deathEvents.Add(slot); }
     public IReadOnlyList<DefenseBotEntry> Entries { get; private set; } = [];
     public int StartTick { get; private set; }
     public bool Active { get; private set; }
@@ -33,7 +35,7 @@ public sealed class DefenseBotController(IDefenseReplayEngine engine)
             entries.Select(e => e.Role).Distinct().Count() != entries.Length ||
             entries.Any(e => e.Role is < 1 or > 5 || e.OffsetTicks < 0 || e.TotalTicks < 1 || e.HandoffTicks < 0 || e.HandoffTicks > e.TotalTicks))
             throw new InvalidOperationException("Defense BOT 编组无效。");
-        Entries = entries; StartTick = startTick; Active = true;
+        Entries = entries; StartTick = startTick; Active = true; _deathEvents.Clear();
         foreach (var e in entries) { e.State = DefenseBotState.Waiting; e.StartedTick = null; e.HandoffTick = null; }
     }
     public void Tick(int now)
@@ -42,6 +44,7 @@ public sealed class DefenseBotController(IDefenseReplayEngine engine)
         foreach (var e in Entries)
         {
             if (e.State == DefenseBotState.Dead) continue;
+            if (_deathEvents.Contains(e.Slot)) { engine.Stop(e.Slot); e.State = DefenseBotState.Dead; continue; }
             if (!engine.IsConnected(e.Slot)) throw new InvalidOperationException($"Defense 队员 {e.Role} 意外断线。");
             if (!engine.IsAlive(e.Slot)) { engine.Stop(e.Slot); e.State = DefenseBotState.Dead; continue; }
             if (e.State == DefenseBotState.Waiting && now >= checked(StartTick + e.OffsetTicks))
@@ -77,23 +80,33 @@ public sealed class DefenseBotController(IDefenseReplayEngine engine)
     }
 }
 
-public enum DefenseResult { Success, Failure, Timeout }
+public enum DefenseResult { Success, Failure, Timeout, Draw }
 public sealed class DefenseStatistics
 {
     public int Rounds { get; private set; }
     public int Success { get; private set; }
     public int Failure { get; private set; }
     public int Timeouts { get; private set; }
+    public int Draws { get; private set; }
     public DefenseResult? LastResult { get; private set; }
     public void Finish(DefenseResult result)
     {
         Rounds++; LastResult = result;
-        if (result == DefenseResult.Success) Success++; else if (result == DefenseResult.Failure) Failure++; else Timeouts++;
+        if (result == DefenseResult.Success) Success++; else if (result == DefenseResult.Failure) Failure++;
+        else if (result == DefenseResult.Draw) Draws++; else Timeouts++;
     }
     public static DefenseResult? Evaluate(bool defenderAlive, int dead, int total, bool timedOut)
     {
         if (!defenderAlive) return DefenseResult.Failure;
         if (total > 0 && dead == total) return DefenseResult.Success;
+        return timedOut ? DefenseResult.Timeout : null;
+    }
+    public static DefenseResult? EvaluateTeam(int aliveCT, int effectiveCT, int deadT, int totalT, bool timedOut)
+    {
+        if (effectiveCT < 1) return null; // Nobody remains: abort rather than scoring a disconnect as a death.
+        if (aliveCT == 0 && totalT > 0 && deadT == totalT) return DefenseResult.Draw;
+        if (aliveCT == 0) return DefenseResult.Failure;
+        if (totalT > 0 && deadT == totalT) return DefenseResult.Success;
         return timedOut ? DefenseResult.Timeout : null;
     }
 }
@@ -103,6 +116,11 @@ public sealed class DefenseSettings
     public Guid TacticId { get; set; }
     public string Map { get; set; } = "";
     public Track? Defender { get; set; }
+    public Dictionary<string, Track> Defenders { get; set; } = new(StringComparer.Ordinal);
+    public void MigrateOwner(string owner)
+    {
+        if (Defender != null && !Defenders.ContainsKey(owner)) Defenders[owner] = Defender;
+    }
     public int Difficulty { get; set; } = 2;
     public bool Repeat { get; set; } = true;
     public int RoundSeconds { get; set; } = 120;
@@ -116,12 +134,15 @@ public sealed class DefenseSettings
             if (!tactic.Tracks.TryGetValue(role, out var track)) throw new InvalidDataException("Defense 场景含不存在的队员。");
             DefenseBotController.HandoffTicks(ms, track, tactic.TickInterval);
         }
-        if (Defender != null)
+        if (Defenders.Count > 32 || Defenders.Keys.Any(k => !AccessPolicy.IsSteamId64(k)))
+            throw new InvalidDataException("Defense 防守者配置数量或 SteamID64 无效。");
+        foreach (var defender in Defenders.Values.Concat(Defender == null ? [] : new[] { Defender }))
         {
-            var p = Defender.Initial;
+            if (defender == null) throw new InvalidDataException("Defense 防守者配置为空。");
+            var p = defender.Initial;
             if (!float.IsFinite(p.X) || !float.IsFinite(p.Y) || !float.IsFinite(p.Z) || !float.IsFinite(p.Pitch) || !float.IsFinite(p.Yaw) ||
-                !float.IsFinite(p.Roll) || Defender.Equipment.Length > 24 || Defender.Ammo.Length > 256 ||
-                Defender.Equipment.Any(e => !System.Text.RegularExpressions.Regex.IsMatch(e.ClassName, "^weapon_[a-z0-9_]{1,48}$")))
+                !float.IsFinite(p.Roll) || defender.Equipment.Length > 24 || defender.Ammo.Length > 256 ||
+                defender.Equipment.Any(e => !System.Text.RegularExpressions.Regex.IsMatch(e.ClassName, "^weapon_[a-z0-9_]{1,48}$")))
                 throw new InvalidDataException("Defense 防守位置或装备无效。");
         }
     }

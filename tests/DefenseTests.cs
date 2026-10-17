@@ -53,6 +53,15 @@ static class DefenseTests
             engine.Stopped.Clear(); engine.FailHandoff = true; controller.Begin(20, [new(1, 1, 0, 100, 0)]);
             engine.Now = 20; reject(() => controller.Tick(20)); controller.Cancel();
         });
+        test("native death events settle before lagging pawn-alive polling and do not interrupt other bots", () =>
+        {
+            var engine = new DefenseFake(); var controller = new DefenseBotController(engine);
+            controller.Begin(0, [new(1, 1, 0, 100, 80), new(3, 3, 0, 100, 90)]); controller.Tick(0);
+            controller.MarkDead(1); controller.MarkDead(99); engine.Now = 1; controller.Tick(1);
+            Check(controller.DeadCount == 1 && engine.Stops.SetEquals(new[] { 1 }) && controller.Entries[1].State == DefenseBotState.Replaying);
+            controller.Cancel(); controller.Begin(10, [new(1, 1, 0, 100, 80)]); engine.Now = 10; controller.Tick(10);
+            Check(controller.DeadCount == 0);
+        });
         test("Defense handoff bounds, auto timing and separate SteamID whitelist", () =>
         {
             var tactic = fixture(); var track = tactic.Tracks[1];
@@ -76,11 +85,61 @@ static class DefenseTests
             JsonSerializer.Deserialize<DefenseSettings>(JsonSerializer.Serialize(settings))!.Validate(store.Load(tactic.Map, tactic.Name));
             Check(File.ReadAllBytes(file).SequenceEqual(bytes)); tactic.Team = 3; reject(() => settings.Validate(tactic));
             var stats = new DefenseStatistics(); foreach (var result in Enum.GetValues<DefenseResult>()) stats.Finish(result);
-            Check(stats.Rounds == 3 && stats.Success == 1 && stats.Failure == 1 && stats.Timeouts == 1);
+            Check(stats.Rounds == 4 && stats.Success == 1 && stats.Failure == 1 && stats.Timeouts == 1 && stats.Draws == 1);
             Check(DefenseStatistics.Evaluate(false, 0, 3, false) == DefenseResult.Failure);
             Check(DefenseStatistics.Evaluate(true, 3, 3, false) == DefenseResult.Success);
             Check(DefenseStatistics.Evaluate(true, 1, 3, true) == DefenseResult.Timeout);
             Check(DefenseStatistics.Evaluate(true, 1, 3, false) == null);
+        });
+        test("cooperative outcomes count only effective CT and resolve simultaneous elimination deterministically", () =>
+        {
+            Check(DefenseStatistics.EvaluateTeam(1, 2, 0, 5, false) == null);
+            Check(DefenseStatistics.EvaluateTeam(1, 2, 5, 5, false) == DefenseResult.Success);
+            Check(DefenseStatistics.EvaluateTeam(0, 2, 4, 5, false) == DefenseResult.Failure);
+            Check(DefenseStatistics.EvaluateTeam(0, 2, 5, 5, true) == DefenseResult.Draw);
+            Check(DefenseStatistics.EvaluateTeam(2, 2, 3, 5, true) == DefenseResult.Timeout);
+            Check(DefenseStatistics.EvaluateTeam(0, 0, 0, 5, true) == null);
+            foreach (int count in new[] { 1, 2, 3, 5 }) Check(DefenseStatistics.EvaluateTeam(count, count, 5, 5, false) == DefenseResult.Success);
+        });
+        test("cooperative membership is explicit, capped at five and cannot transfer owner via slot reuse", () =>
+        {
+            DefenseParticipant Member(int i, int slot = -1) => new(new((76561198000000000UL + (uint)i).ToString(), slot < 0 ? i : slot, i, (uint)(100 + i)), "CT" + i);
+            var owner = Member(1); var session = new DefenseSession(owner);
+            Check(session.IsOwner(owner.Identity));
+            Check(!session.IsOwner(owner.Identity with { UserId = 99 }));
+            Check(!session.IsOwner(owner.Identity with { Handle = 999 }));
+            Check(!session.IsOwner(Member(2, 1).Identity));
+            for (int i = 2; i <= 5; i++) Check(session.Join(Member(i)));
+            Check(!session.Join(Member(2))); reject(() => session.Join(Member(6)));
+            Check(session.OwnerId == owner.Identity.SteamId && session.Members.Count == 5);
+            var reused = Member(7, 2); Check(!session.Contains(reused.Identity) && !session.Remove(reused.Identity));
+            var old = Member(2); Check(session.Remove(old.Identity)); Check(session.Join(reused));
+            Check(!session.Contains(old.Identity) && session.Contains(reused.Identity));
+        });
+        test("cooperative round snapshots isolate joins, sticky deaths and deferred departures", () =>
+        {
+            var a = new DefenseParticipant(new("76561198000000001", 1, 11, 111), "Owner");
+            var b = new DefenseParticipant(new("76561198000000002", 2, 12, 112), "Friend");
+            var c = new DefenseParticipant(new("76561198000000003", 3, 13, 113), "Later");
+            var session = new DefenseSession(a); session.Join(b); session.BeginRound();
+            a.Dead = true; Check(session.Round.Values.Count(m => !m.Dead) == 1);
+            session.Join(c); Check(session.Round.Count == 2 && session.Members.Count == 3);
+            b.PendingLeave = true; Check(session.Round.ContainsKey(b.Identity.SteamId));
+            session.ApplyPendingLeaves(); Check(session.Round.Count == 1 && !session.Members.ContainsKey(b.Identity.SteamId));
+            session.BeginRound(); Check(session.Round.Count == 2 && session.Round.Values.All(m => !m.Dead));
+            session.Remove(c.Identity); Check(session.Round.Count == 1 && session.OwnerId == a.Identity.SteamId);
+        });
+        test("legacy single-defender JSON migrates only owner and preserves independent multiplayer loadouts", () =>
+        {
+            var tactic = fixture(); string a = "76561198000000001", b = "76561198000000002";
+            var old = new DefenseSettings { TacticId = tactic.Id, Map = tactic.Map, Defender = tactic.Tracks[1], Difficulty = 3, Repeat = false, RoundSeconds = 60, HandoffMilliseconds = new() { [1] = 300 } };
+            var settings = JsonSerializer.Deserialize<DefenseSettings>(JsonSerializer.Serialize(old))!;
+            settings.MigrateOwner(a); Check(settings.Defenders.Count == 1 && !settings.Defenders.ContainsKey(b));
+            settings.Defenders[b] = tactic.Tracks[2]; settings.Validate(tactic);
+            var again = JsonSerializer.Deserialize<DefenseSettings>(JsonSerializer.Serialize(settings))!; again.MigrateOwner(a); again.Validate(tactic);
+            Check(again.Difficulty == 3 && !again.Repeat && again.RoundSeconds == 60 && again.HandoffMilliseconds[1] == 300);
+            Check(again.Defenders[a].Role == 1 && again.Defenders[b].Role == 2);
+            again.Defenders["not-authenticated"] = tactic.Tracks[1]; reject(() => again.Validate(tactic));
         });
     }
 }

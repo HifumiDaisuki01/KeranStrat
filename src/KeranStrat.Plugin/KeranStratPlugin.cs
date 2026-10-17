@@ -37,7 +37,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.3.1";
+    public override string ModuleVersion => "0.4.0";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -113,17 +113,19 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         RegisterDefenseProbe();
         AddCommand("css_ksd", "KeranStrat Defense 防守训练", DefenseCommand);
         AddCommand("css_ksd_selftest", "Console-only empty-server Defense round automation", StartDefenseSelfTest);
+        AddCommand("css_ksd_cooptest", "Console-only empty-server cooperative Defense automation", StartDefenseCoopTest);
         WatchConfiguration();
         RegisterListener<Listeners.OnTick>(Tick);
         RegisterListener<Listeners.OnMapStart>(TrainingMapStarted);
-        RegisterListener<Listeners.OnMapEnd>(() => { StopDefense("地图结束"); Abort("地图结束", false); _tactic = null; _anchor = null; _defenseTactic = null; _defenseSettings = null; });
+        RegisterListener<Listeners.OnMapEnd>(() => { CloseDefense("地图结束"); Abort("地图结束", false); _tactic = null; _anchor = null; });
         RegisterEventHandler<EventPlayerDisconnect>((e, _) =>
         {
-            if (e.Userid != null && e.Userid.Slot == _defenseOwnerSlot) StopDefense("防守玩家断线");
+            if (e.Userid != null) DefenseDisconnected(e.Userid);
             if (e.Userid != null && e.Userid.Slot == _ownerSlot)
             { if (_state != "idle" || _busy) Abort("操作玩家断线", false); _owner = 0; _ownerSlot = -1; }
             return HookResult.Continue;
         }, HookMode.Pre);
+        RegisterEventHandler<EventPlayerDeath>((e, _) => { DefenseMarkDeath(e.Userid); return HookResult.Continue; });
         RegisterEventHandler<EventPlayerConnectFull>((e, _) =>
         {
             if (e.Userid is { IsBot: false, IsValid: true } p)
@@ -133,6 +135,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
             var p = e.Userid;
+            DefenseHandleSpawn(p);
             if (p is { IsValid: true, IsBot: false } && _trainingMode == "Practice" && !_modeChanging && _state == "idle" && !DefenseBusy)
                 Server.NextFrame(() =>
                 {
@@ -223,10 +226,12 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         }
         try
         {
-            if (DefenseBusy && action is not ("help" or "source" or "status"))
+            if (DefenseLease && action is not ("help" or "source" or "status"))
             {
-                if (action == "exit") StopDefense("原版指令退出训练");
-                else throw new InvalidOperationException("Defense 训练操作进行中，请先 !ksd stop。");
+                if (action == "exit")
+                { if (player != null) DefenseRequireOwner(player); CloseDefense("房主原版指令退出训练"); }
+                else if (player == null && action == "cancel") CloseDefense("服务端紧急取消");
+                else throw new InvalidOperationException("Defense 会话占用中，请房主先 !ksd close 解散会话。");
             }
             if (action == "status")
             {
@@ -445,6 +450,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             if (DefenseProbeTick()) return;
             DefenseTick();
             DefenseSelfTestTick();
+            DefenseCoopTestTick();
             if (SelfTestTick()) return;
             if (_state is "countdown" or "recording")
             {
@@ -524,7 +530,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     private void Abort(string reason, bool exitPractice)
     {
         EndDefenseSelfTest();
-        StopDefense(reason);
+        EndDefenseCoopTest();
+        CloseDefense(reason);
         StopDefenseProbe();
         try { ClearRecordingHud(); } catch (InvalidOperationException) { /* player disconnected */ }
         _hudUntil = 0; _hudNextTick = 0;

@@ -52,8 +52,8 @@ PracticeCvars 默认包含 sv_cheats=1、mp_autoteambalance=0、mp_limitteams=0�
 | DefenseAllowedSteamIDs | [] | 独立 SteamID64 字符串白名单；不继承 AllowedSteamIDs |
 | DefenseRoundSeconds | 120 | 新场景默认单轮上限，10～600秒 |
 
-原版 Enabled/AllowedSteamIDs 与 Defense 开关/白名单互不继承。关闭 Defense 或移除训练玩家的权限会停止其训练，保留 Practice。只具备 Defense 权限也可以独立 practice、load、position、start 和 exit。
+原版 Enabled/AllowedSteamIDs 与 Defense 开关/白名单互不继承。所有真人成员均需 Defense 授权；普通成员不能执行房主管理操作。关闭 Defense 或移除房主权限会解散会话、保留 Practice；普通成员失去权限则移出队伍。只具备 Defense 权限也可以独立进入和使用训练。
 
-Defense 场景单独保存在 data/defense/<SteamID64>/<战术ID>.json；包含防守 Track、Difficulty、Repeat、RoundSeconds 和 HandoffMilliseconds。`null` 交接值表示 auto。每个交接时间从该队员自己的轨迹起点计算，原 OffsetMs 不变，不能超出轨迹长度。
+Defense 场景单独保存在 data/defense/<房主SteamID64>/<战术ID>.json；包含 Defenders（以成员 SteamID64 为键的完整防守 Track）、Difficulty、Repeat、RoundSeconds 和 HandoffMilliseconds。旧单人 Defender 继续读取并映射为房主配置；存档中的历史成员不会自动加入队伍。每场景最多 32 名历史位置、64 KiB，当前会话最多五名 CT。`null` 交接值表示 auto。每个交接时间从该队员自己的轨迹起点计算，原 OffsetMs 不变，不能超出轨迹长度。
 
-运行时临时设置 bot_dont_shoot=0、bot_difficulty=难度-1、bot_stop=0、bot_zombie=0、bot_quota_mode=normal 和 mp_respawn_immunitytime=0，按实际 BOT 数维护 quota；结束后恢复快照。Defense 不修改 server.cfg，不改写原版 .ks。完整说明见 DEFENSE.md。
+运行时临时设置 bot_dont_shoot=0、bot_difficulty=难度-1、bot_stop=0、bot_zombie=0、bot_quota_mode=normal、mp_respawn_immunitytime=0、mp_respawn_on_death_ct=0、mp_respawn_on_death_t=0，按实际 BOT 数维护 quota；结束后恢复快照。全员复活就绪等待上限 10 秒，BOT 准备上限 15 秒，均按实际 TickInterval 计算。Defense 不修改 server.cfg，不改写原版 .ks。完整说明见 DEFENSE.md。

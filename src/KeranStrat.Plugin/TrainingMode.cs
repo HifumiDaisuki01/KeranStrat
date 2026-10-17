@@ -102,6 +102,7 @@ public sealed partial class KeranStratPlugin
     }
     private void TrainingMapStarted(string map)
     {
+        _defenseRetiring.Clear();
         _tactic = null; _anchor = null;
         _defenseTactic = null; _defenseSettings = null;
         _lastRecordedRole = 0; _hudUntil = 0; _hudNextTick = 0; _hudVisible = false; _trainingSetupIssued = false;
@@ -179,8 +180,9 @@ public sealed partial class KeranStratPlugin
         OnConfigParsed(settings);
         _store = new FileTacticStore(_dataRoot, Config.MaxTacticsPerMap, Config.MaxFileMegabytes * 1024L * 1024, MaxTicks, Config.MaxStorageMegabytes * 1024L * 1024);
         if (!_practice.Active) _practice = new PracticeEnvironment(Path.Combine(_dataRoot, "practice-recovery.json"), Config.PracticeCvars);
-        if (!Config.DefenseEnabled && DefenseBusy) StopDefense("Defense 配置已禁用");
-        if (!Config.Enabled && _trainingMode == "Practice" && !_modeDefense && !DefenseBusy) ExitTraining();
+        DefenseValidateMembers();
+        if (!Config.DefenseEnabled && DefenseLease) CloseDefense("Defense 配置已禁用");
+        if (!Config.Enabled && _trainingMode == "Practice" && !_modeDefense && !DefenseLease) ExitTraining();
     }
     private static readonly HashSet<string> PrimaryWeapons = new(StringComparer.Ordinal)
     {
