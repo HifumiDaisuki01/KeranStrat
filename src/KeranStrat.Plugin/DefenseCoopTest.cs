@@ -23,7 +23,7 @@ public sealed partial class KeranStratPlugin
 
     private void StartDefenseCoopTest(CCSPlayerController? player, CommandInfo command)
     {
-        if (player != null || OtherHumans(0) || Utilities.GetPlayers().Any(p => p.IsValid && p.IsBot) || DefenseLease ||
+        if (player != null || VersusLease || OtherHumans(0) || Utilities.GetPlayers().Any(p => p.IsValid && p.IsBot) || DefenseLease ||
             _coopTestPhase != 0 || _defenseTestPhase != 0 || _state != "idle" || _busy || _modeChanging ||
             Server.MapName != "de_dust2" || _trainingMode != "Practice" || !Config.DefenseEnabled || !Bind())
             throw new InvalidOperationException("多人自测仅允许空服、Dust2 Practice 的服务端控制台。");

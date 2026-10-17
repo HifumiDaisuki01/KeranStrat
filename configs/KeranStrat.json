@@ -15,5 +15,33 @@
   "MaxTacticsPerMap": 100,
   "MaxFileMegabytes": 64,
   "MaxStorageMegabytes": 256,
-  "SourceUrl": "https://github.com/HifumiDaisuki01/KeranStrat"
+  "SourceUrl": "https://github.com/HifumiDaisuki01/KeranStrat",
+  "VersusXRayDefault": true,
+  "KsXRayDefault": false,
+  "KsXRayColors": {
+    "2": "#FF8B27",
+    "4": "#35D88B",
+    "5": "#2588FF",
+    "1": "#FF4141",
+    "3": "#FFC83D"
+  },
+  "VersusMaxStorageMegabytes": 256,
+  "VersusRoundSeconds": 120,
+  "VersusDefaultMode": "hybrid",
+  "VersusMaxPlayersPerTeam": 5,
+  "VersusEnabled": true,
+  "VersusXRayColors": {
+    "CT1": "#2588FF",
+    "CT3": "#35D88B",
+    "T2": "#FF8B27",
+    "T1": "#FF4141",
+    "CT2": "#22D1E8",
+    "CT4": "#A7EE49",
+    "CT5": "#B0BCDA",
+    "T4": "#FF50AA",
+    "T3": "#FFC83D",
+    "T5": "#CC55FF"
+  },
+  "VersusAllowedSteamIDs": [],
+  "VersusMaxFileMegabytes": 64
 }

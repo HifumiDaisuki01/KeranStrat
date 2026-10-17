@@ -47,3 +47,8 @@ NativeReplayEngine.HandoffToCombatAI 顺序为 StopReplay（清除回放状态�
 DefenseBotController 使用独立策略：死亡是正常事件；控制器断线、加载失败和提前终止为故障；交接不结束本轮，所有 BOT 消灭、全体有效 CT 死亡或超时才结束；同时全灭记为平局。本地交接 Tick 与每角色 OffsetTicks 分开，所有启动和交接由一个 OnTick 推进。原版 ReplayCoordinator 无交接行为。
 
 临时实体每200ms追踪，使用带序列号的实体句柄及参与者归属，防止重用指针误删。场景文件与原 .ks 分离；代际标记阻止过期后台加载覆盖换图/取消后的状态。Defense 的参数恢复先于 Practice 恢复，避免异常重启后把练习值当作最终正常值。
+
+## Versus 与 X 光隔离
+VersusScene/VersusStore 使用独立 .ksv 归档、格式标记、角色身份和容量校验。VersusCoordinator 以一个起始 Tick 管理两队十角色，正常死亡与断线分开处理，Strict 完成后 Hold，Hybrid 独立交接。VersusNativeEngine 包装现有 NativeReplayEngine，增加仅 KSV 使用的保持锁定能力，不修改原引擎及 C++ ABI。
+VersusCommands/Manager/Events 实现操作者租约、异步存储、双阵营录制、编辑切队复活、BOT 清理等待、准备禁火、三秒倒计时和轮间恢复。VersusSelfTest 仅可信空服控制台运行，使用真实原生双阵营录制和独立临时库。
+XRayManager 只创建独立模型跟随实体，通过 CheckTransmit 按已认证观察者及当前模式过滤，Defense 在管理器内部拒绝。PalettePersistence 原子修改一个颜色字段，保留其他 JSON 配置；XRayPolicy 为独立权限和配色检查入口。

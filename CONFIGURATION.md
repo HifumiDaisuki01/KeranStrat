@@ -57,3 +57,7 @@ PracticeCvars 默认包含 sv_cheats=1、mp_autoteambalance=0、mp_limitteams=0�
 Defense 场景单独保存在 data/defense/<房主SteamID64>/<战术ID>.json；包含 Defenders（以成员 SteamID64 为键的完整防守 Track）、Difficulty、Repeat、RoundSeconds 和 HandoffMilliseconds。旧单人 Defender 继续读取并映射为房主配置；存档中的历史成员不会自动加入队伍。每场景最多 32 名历史位置、64 KiB，当前会话最多五名 CT。`null` 交接值表示 auto。每个交接时间从该队员自己的轨迹起点计算，原 OffsetMs 不变，不能超出轨迹长度。
 
 运行时临时设置 bot_dont_shoot=0、bot_difficulty=难度-1、bot_stop=0、bot_zombie=0、bot_quota_mode=normal、mp_respawn_immunitytime=0、mp_respawn_on_death_ct=0、mp_respawn_on_death_t=0，按实际 BOT 数维护 quota；结束后恢复快照。全员复活就绪等待上限 10 秒，BOT 准备上限 15 秒，均按实际 TickInterval 计算。Defense 不修改 server.cfg，不改写原版 .ks。完整说明见 DEFENSE.md。
+
+## Versus 与彩色观察（0.5.0）
+新增 VersusEnabled、VersusAllowedSteamIDs（默认空，不继承）、VersusMaxPlayersPerTeam（1–5）、VersusDefaultMode（hybrid/strict）、VersusRoundSeconds（10–600）、VersusMaxFileMegabytes（1–64）、VersusMaxStorageMegabytes（16–1024）。KSV 单独计量存储配额，仍要求磁盘至少剩余 2 GiB 才保存。
+KsXRayDefault 默认 false，VersusXRayDefault 默认 true；KsXRayColors 和 VersusXRayColors 使用独立角色键与六位 RGB。完整配色模板见 configs/KeranStrat.json；安全持久化和权限说明见 XRAY.md。现有配置只合并缺少的新字段，不覆盖旧字段。

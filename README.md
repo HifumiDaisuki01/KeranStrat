@@ -37,7 +37,7 @@ Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权�
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.4.1-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.5.0-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。
@@ -132,3 +132,10 @@ bash scripts/build.sh
 ## 开源许可与致谢
 
 KeranStrat 采用 [AGPL-3.0-only](LICENSE)。原生录制引擎来自 [XBribo/CS2-Bot-Controller](https://github.com/XBribo/CS2-Bot-Controller)，服务器插件框架来自 [CounterStrikeSharp](https://github.com/roflmuffin/CounterStrikeSharp)。第三方作者、许可证及源码保留在 [THIRD_PARTY.md](THIRD_PARTY.md) 和 `third_party/`。
+
+
+## KeranStrat Versus 与彩色观察
+
+新增独立 `!ksv` 双阵营战术模拟：每队 1～5 个 BOT，共用 Tick 时间轴，支持严格回放与逐角色原生 AI 交接。场景采用独立 .ksv 文件，权限不继承 KS 或 Defense。使用说明见 [KSV.md](KSV.md)。
+
+KS（默认关）和 KSV（默认开）提供独立彩色 X 光，仅限有对应权限的观察者在回放中观看。支持游戏内实时改色和保存，Defense 永久禁用。详见 [XRAY.md](XRAY.md)。

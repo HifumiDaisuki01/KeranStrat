@@ -43,6 +43,7 @@ public sealed partial class KeranStratPlugin
     }
     private void DefenseRequireIdle()
     {
+        if (VersusLease) throw new InvalidOperationException("KSV 会话占用中，请先 !ksv exit。");
         if (_modeChanging || _busy || _state != "idle" || _probePhase != 0 || _selfTestPhase != 0)
             throw new InvalidOperationException("当前已有原版录制、回放或切图操作进行中。");
     }
@@ -67,6 +68,7 @@ public sealed partial class KeranStratPlugin
     }
     private void DefenseLoad(CCSPlayerController p, string query)
     {
+        XRayClear();
         string map = Server.MapName; double interval = Server.TickInterval; string gameVersion = _gameVersion; int generation = ++_defenseGeneration;
         _defenseOwner = p.SteamID; _defenseOwnerSlot = p.Slot; _defenseLoading = true;
         ulong owner = _defenseOwner;
@@ -189,6 +191,7 @@ public sealed partial class KeranStratPlugin
             if (DefenseBusy) throw new InvalidOperationException("请先 !ksd stop 停止当前训练或加载。");
             if (action == "practice")
             {
+                XRayClear(); _modeVersus = false;
                 if (_trainingMode == "Practice") { _modeDefense = true; DefensePracticeFunds(player); Reply("已进入训练环境，可按 B 购买防守装备。"); return; }
                 _modeDefense = true; EnterTraining(); Reply("正在进入训练环境。"); return;
             }

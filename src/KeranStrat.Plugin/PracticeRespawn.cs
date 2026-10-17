@@ -8,7 +8,7 @@ public sealed partial class KeranStratPlugin
 {
     private readonly PracticeTeamRespawn _practiceTeamRespawn = new();
     private bool KsPracticeRespawnEnabled => PracticeTeamRespawn.Allows(_trainingMode == "Practice", _practice.Active,
-        _modeChanging, _modeDefense, DefenseLease, DefenseBusy);
+        _modeChanging, _modeDefense || _modeVersus, DefenseLease || VersusLease, DefenseBusy);
     private static PracticeIdentity PracticeIdentityOf(CCSPlayerController p) =>
         new(p.AuthorizedSteamID!.SteamId64, p.Slot, p.UserId!.Value, p.EntityHandle.Raw);
     private bool KsPracticeHuman(CCSPlayerController p) => p.IsValid && !p.IsBot && !p.IsHLTV && p.UserId != null &&

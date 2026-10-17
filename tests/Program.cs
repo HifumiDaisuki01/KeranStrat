@@ -286,6 +286,7 @@ Test("KS respawn gate excludes Defense including idle lease and map transitions"
     Check(!queue.Take(player, 2, true, 101)); // Engine may still expose old team/alive state in event frame.
     Check(queue.Take(player, 3, false, 116));
 });
+VersusTests.Run(Test, Check, Reject, () => Fixture(), temp);
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
 

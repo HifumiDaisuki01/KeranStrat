@@ -52,7 +52,7 @@ public sealed partial class KeranStratPlugin
     }
     private void StartDefenseProbe(CCSPlayerController? player, CommandInfo cmd)
     {
-        if (player != null || OtherHumans(0) || Server.MapName != "de_dust2" || Utilities.GetPlayers().Any(p => p.IsValid && p.IsBot) || !Config.DefenseEnabled || DefenseBusy || _state != "idle" || _busy || _modeChanging || _trainingMode != "Practice" || !Bind())
+        if (player != null || VersusLease || OtherHumans(0) || Server.MapName != "de_dust2" || Utilities.GetPlayers().Any(p => p.IsValid && p.IsBot) || !Config.DefenseEnabled || DefenseBusy || _state != "idle" || _busy || _modeChanging || _trainingMode != "Practice" || !Bind())
             throw new InvalidOperationException("Combat probe requires empty, idle Practice server console.");
         _probeCvars = new();
         foreach (var name in new[] { "bot_dont_shoot", "bot_difficulty", "bot_stop", "bot_zombie", "bot_quota" })

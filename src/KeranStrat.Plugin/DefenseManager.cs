@@ -33,6 +33,8 @@ public sealed partial class KeranStratPlugin
     }
     private void StartDefense(CCSPlayerController player)
     {
+        if (VersusLease) throw new InvalidOperationException("KSV 会话占用中。");
+        XRayClear();
         if (!Config.DefenseEnabled || DefenseBusy) throw new InvalidOperationException("Defense 当前不可启动。");
         DefenseRequireIdle();
         if (_defenseSession == null && DefenseDiagnostic) _defenseSession = new DefenseSession(DefenseCreateParticipant(player));

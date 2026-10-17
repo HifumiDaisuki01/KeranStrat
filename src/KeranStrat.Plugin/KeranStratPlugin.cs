@@ -17,6 +17,17 @@ public sealed class KeranStratConfig : BasePluginConfig
     public bool DefenseEnabled { get; set; } = true;
     public string[] DefenseAllowedSteamIDs { get; set; } = [];
     public int DefenseRoundSeconds { get; set; } = 120;
+    public bool VersusEnabled { get; set; } = true;
+    public string[] VersusAllowedSteamIDs { get; set; } = [];
+    public int VersusMaxPlayersPerTeam { get; set; } = 5;
+    public string VersusDefaultMode { get; set; } = "hybrid";
+    public int VersusRoundSeconds { get; set; } = 120;
+    public int VersusMaxFileMegabytes { get; set; } = 64;
+    public int VersusMaxStorageMegabytes { get; set; } = 256;
+    public bool KsXRayDefault { get; set; }
+    public Dictionary<string, string> KsXRayColors { get; set; } = XRayPolicy.KsDefaults();
+    public bool VersusXRayDefault { get; set; } = true;
+    public Dictionary<string, string> VersusXRayColors { get; set; } = XRayPolicy.VersusDefaults();
     public string DefaultMap { get; set; } = "de_dust2";
     public string DefaultGameMode { get; set; } = "deathmatch";
     public int MaxRecordedPlayers { get; set; } = 5;
@@ -37,7 +48,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.4.1";
+    public override string ModuleVersion => "0.5.0";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -68,9 +79,16 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     private readonly List<string> _lastReport = [];
     private string _lastError = "none";
     private HashSet<string> _allowed = new(StringComparer.Ordinal);
+    private HashSet<string> _versusAllowed = new(StringComparer.Ordinal);
 
     public void OnConfigParsed(KeranStratConfig config)
     {
+        if (config.VersusAllowedSteamIDs.Any(s => !AccessPolicy.IsSteamId64(s)) || config.VersusMaxPlayersPerTeam is < 1 or > 5 ||
+            config.VersusDefaultMode is not ("strict" or "hybrid") || config.VersusRoundSeconds is < 10 or > 600 ||
+            config.VersusMaxFileMegabytes is < 1 or > 64 || config.VersusMaxStorageMegabytes is < 16 or > 1024)
+            throw new ArgumentException("KSV 配置超出范围。");
+        config.KsXRayColors = XRayPolicy.Merge(false, config.KsXRayColors);
+        config.VersusXRayColors = XRayPolicy.Merge(true, config.VersusXRayColors);
         if (config.CountdownSeconds is < 1 or > 10 || config.MaxRecordingSeconds is < 1 or > 180 ||
             config.MaxTacticsPerMap is < 1 or > 1000 || config.MaxFileMegabytes is < 1 or > 64 || config.MaxStorageMegabytes is < 16 or > 1024 ||
             config.MaxRecordedPlayers is < 1 or > 5 || config.DefaultMap != "de_dust2" || config.DefaultGameMode != "deathmatch" ||
@@ -88,6 +106,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         Config = config;
         _allowed = new HashSet<string>(config.AllowedSteamIDs, StringComparer.Ordinal);
         _defenseAllowed = new HashSet<string>(config.DefenseAllowedSteamIDs, StringComparer.Ordinal);
+        _versusAllowed = new HashSet<string>(config.VersusAllowedSteamIDs, StringComparer.Ordinal);
     }
     private int MaxTicks => checked((int)Math.Ceiling(Config.MaxRecordingSeconds / (double)Server.TickInterval));
     private static PluginCapability<IBotControllerApi> Capability => new("botcontroller:api");
@@ -98,8 +117,10 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             throw new ArgumentException("DataDirectory 必须位于插件专用目录内。");
         Directory.CreateDirectory(_dataRoot);
         _store = new FileTacticStore(_dataRoot, Config.MaxTacticsPerMap, Config.MaxFileMegabytes * 1024L * 1024, MaxTicks, Config.MaxStorageMegabytes * 1024L * 1024);
+        InitializeVersusStore();
         _practice = new PracticeEnvironment(Path.Combine(_dataRoot, "practice-recovery.json"), Config.PracticeCvars);
         RecoverDefenseEnvironment();
+        RecoverVersus();
         _practice.Recover();
         try
         {
@@ -114,10 +135,15 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         AddCommand("css_ksd", "KeranStrat Defense 防守训练", DefenseCommand);
         AddCommand("css_ksd_selftest", "Console-only empty-server Defense round automation", StartDefenseSelfTest);
         AddCommand("css_ksd_cooptest", "Console-only empty-server cooperative Defense automation", StartDefenseCoopTest);
+        AddCommand("css_ksv", "KeranStrat Versus 独立双阵营战术模拟", (p, c) => VersusCommand(p, c));
+        AddCommand("css_ksv_stop", "KSV 快捷结束录制", (p, c) => VersusCommand(p, c, "stop"));
+        AddCommand("css_ksv_selftest", "Console-only empty-server dual-team native simulation test", StartVersusTest);
+        RegisterVersusTestEvents();
+        RegisterListener<Listeners.CheckTransmit>(XRayTransmit);
         WatchConfiguration();
         RegisterListener<Listeners.OnTick>(Tick);
         RegisterListener<Listeners.OnMapStart>(TrainingMapStarted);
-        RegisterListener<Listeners.OnMapEnd>(() => { CloseDefense("地图结束"); Abort("地图结束", false); _tactic = null; _anchor = null; });
+        RegisterListener<Listeners.OnMapEnd>(() => { XRayClear(); StopVersus("地图结束", close: true); CloseDefense("地图结束"); Abort("地图结束", false); _tactic = null; _anchor = null; });
         RegisterEventHandler<EventPlayerDisconnect>((e, _) =>
         {
             if (e.Userid != null) DefenseDisconnected(e.Userid);
@@ -125,19 +151,20 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             { if (_state != "idle" || _busy) Abort("操作玩家断线", false); _owner = 0; _ownerSlot = -1; }
             return HookResult.Continue;
         }, HookMode.Pre);
-        RegisterEventHandler<EventPlayerDeath>((e, _) => { DefenseMarkDeath(e.Userid); return HookResult.Continue; });
+        RegisterEventHandler<EventPlayerDeath>((e, _) => { DefenseMarkDeath(e.Userid); VersusDeath(e.Userid); return HookResult.Continue; });
         RegisterEventHandler<EventPlayerConnectFull>((e, _) =>
         {
             if (e.Userid is { IsBot: false, IsValid: true } p)
                 p.PrintToChat("[KeranStrat] AGPL 源码: " + Config.SourceUrl);
             return HookResult.Continue;
         });
-        RegisterEventHandler<EventPlayerTeam>((e, _) => { PracticeTeamChanged(e.Userid, e.Team, e.Oldteam); return HookResult.Continue; }, HookMode.Post);
+        RegisterEventHandler<EventPlayerTeam>((e, _) => { PracticeTeamChanged(e.Userid, e.Team, e.Oldteam); VersusTeamChanged(e.Userid, e.Team, e.Oldteam); return HookResult.Continue; }, HookMode.Post);
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
             var p = e.Userid;
             DefenseHandleSpawn(p);
             if (p != null) _practiceTeamRespawn.Cancel(p.Slot);
+            if (p != null) _versusRespawn.Cancel(p.Slot);
             if (p is { IsValid: true, IsBot: false } && _trainingMode == "Practice" && !_modeChanging && _state == "idle" && !DefenseBusy)
             {
                 var spawnIdentity = p.EntityHandle.Raw;
@@ -149,6 +176,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                         if (p.IsValid && p.EntityHandle.Raw == spawnIdentity && p.UserId == spawnUserId && p.PawnIsAlive && _trainingMode == "Practice" && _state == "idle" && !DefenseBusy)
                         {
                             if (KsPracticeRespawnEnabled && KsPracticeHuman(p)) GivePracticeKit(p);
+                            else if (_modeVersus && !VersusBusy && !DefenseLease && VersusAuthorized(p)) GivePracticeKit(p);
                             else if (AccessPolicy.Allows(Config.DefenseEnabled, _defenseAllowed, p.AuthorizedSteamID?.SteamId64.ToString())) DefensePracticeFunds(p);
                         }
                     }
@@ -232,6 +260,12 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         }
         try
         {
+            if (action == "xray") { XRayCommand(player, cmd, false); return; }
+            if (VersusLease && action != "status")
+            {
+                if (player == null && action == "cancel") StopVersus("服务端紧急取消", close: true);
+                else throw new InvalidOperationException("KSV 会话占用中，请操作者先 !ksv exit。");
+            }
             if (DefenseLease && action is not ("help" or "source" or "status"))
             {
                 if (action == "exit")
@@ -263,9 +297,10 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 if (!Config.Enabled) throw new InvalidOperationException("KeranStrat 已禁用。");
                 if (player != null) RequireOwner(player);
                 _modeDefense = false;
+                _modeVersus = false;
                 if (action == "exit" || (action == "practice" && cmd.GetArg(2) == "off")) ExitTraining();
                 else if (action == "map") ChangeTrainingMap(cmd.GetArg(2));
-                else { _modeDefense = false; EnterTraining(); }
+                else { _modeDefense = false; if (_trainingMode == "Practice") { Reply("KS Practice 已就绪。"); return; } EnterTraining(); }
                 Reply("已请求切换，加载完成后会核对地图与游戏规则。"); return;
             }
             if (player == null) throw new InvalidOperationException("此指令需要真人在游戏内操作；服务端可用 status/selftest/cancel。");
@@ -454,10 +489,14 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             RecordingHudTick();
             if (TrainingTick()) return;
             PracticeRespawnTick();
+            VersusRespawnTick();
+            VersusTick();
+            XRayTick();
             if (DefenseProbeTick()) return;
             DefenseTick();
             DefenseSelfTestTick();
             DefenseCoopTestTick();
+            VersusTestTick();
             if (SelfTestTick()) return;
             if (_state is "countdown" or "recording")
             {
@@ -536,6 +575,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     }
     private void Abort(string reason, bool exitPractice)
     {
+        EndVersusTest();
+        XRayClear(); StopVersus(reason, close: true);
         EndDefenseSelfTest();
         EndDefenseCoopTest();
         CloseDefense(reason);
