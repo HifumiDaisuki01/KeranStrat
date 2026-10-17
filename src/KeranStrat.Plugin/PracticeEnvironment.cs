@@ -18,7 +18,11 @@ internal sealed class PracticeEnvironment(string recoveryFile, IReadOnlyDictiona
         ["mp_respawn_on_death_t"] = "0", ["mp_respawn_on_death_ct"] = "0",
         ["sv_hibernate_when_empty"] = "0", ["mp_solid_teammates"] = "0", ["ammo_grenade_limit_total"] = "6",
         ["ammo_grenade_limit_flashbang"] = "2", ["mp_buytime"] = "9999", ["mp_buy_anywhere"] = "1",
-        ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000", ["mp_afterroundmoney"] = "60000"
+        ["mp_maxmoney"] = "60000", ["mp_startmoney"] = "60000", ["mp_afterroundmoney"] = "60000",
+        ["mp_team_intro_time"] = "0", ["mp_warmuptime"] = "5", ["mp_warmup_pausetimer"] = "0",
+        ["mp_warmup_online_enabled"] = "0", ["mp_warmup_offline_enabled"] = "0",
+        ["mp_warmuptime_all_players_connected"] = "0", ["sv_warmup_to_freezetime_delay"] = "0",
+        ["mp_halftime"] = "0", ["mp_maxrounds"] = "999", ["mp_timelimit"] = "0", ["mp_match_can_clinch"] = "0"
     };
     public void Recover()
     {

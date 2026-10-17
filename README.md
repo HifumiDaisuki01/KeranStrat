@@ -19,7 +19,7 @@
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.2.1-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.2.2-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。
@@ -52,6 +52,22 @@
 
 训练模式切换会提示全服并重新加载地图。服务器平时的 Dust2 死斗启动配置保持不变。
 
+## 录制计时与快捷停止
+
+录制时，屏幕中央下方显示队员编号、倒计时和已经过的时间。结束后显示本段录制时长。
+
+在客户端控制台执行一次，即可用鼠标中键停止录制，无须打开聊天框：
+
+```text
+bind "mouse3" "css_ks_stop"
+```
+
+此绑定会替换原鼠标中键功能，也可以选择其他按键。快捷停止采用与聊天指令相同的 SteamID64 白名单和操作归属检查。
+
+录制结束后，`!ks trim 300` 裁掉最近录制队员的末尾 300 毫秒；`!ks trim 300 2` 指定裁剪 2 号。按服务器 Tick 向上取整，并至少保留一帧。裁剪不会自动保存，确认后使用 `!ks save`。
+
+进入训练会结束热身、关闭开场介绍及半场切换，待引擎确认就绪后再允许录制。
+
 ## 指令
 
 所有游戏内指令均需 SteamID64 白名单授权。
@@ -66,11 +82,12 @@
 | `!ks new <名称>` | 新建战术 |
 | `!ks anchor` | 设置当前起点 |
 | `!ks record <1-5>` | 录制或重录队员 |
-| `!ks stop` | 结束录制 |
+| `!ks stop` / `css_ks_stop` | 结束录制；后者可绑定按键 |
 | `!ks play` | 回放全部有效队员 |
 | `!ks replay <1-5>` | 单独回放队员 |
 | `!ks offset <1-5> <毫秒>` | 设置启动延迟 |
 | `!ks remove <1-5>` | 移除队员轨迹 |
+| `!ks trim <毫秒> [队员]` | 裁剪轨迹末尾；默认最近录制的队员 |
 | `!ks save` | 保存当前战术 |
 | `!ks load <名称或ID>` | 加载战术 |
 | `!ks list` | 查看战术列表 |

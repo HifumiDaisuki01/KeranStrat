@@ -86,6 +86,8 @@ public sealed partial class KeranStratPlugin
                 _tactic.Tracks[i] = new Track { Role = i, Initial = _testTrack.Initial, Equipment = _testTrack.Equipment, Ammo = _testTrack.Ammo,
                     Health = _testTrack.Health, Armor = _testTrack.Armor, OffsetMs = i == 5 ? 250 : 0,
                     Ticks = motion.ticks, Subticks = motion.subs, Commands = motion.commands };
+            foreach (int role in _tactic.Tracks.Keys.ToArray())
+                _tactic.Tracks[role] = TrackEditing.TrimEnd(_tactic.Tracks[role], 300, Server.TickInterval);
             _testTacticId = _tactic.Id;
             var saved = _tactic; _selfTestPhase = 3;
             Background(() => { _store.Save(saved); return _store.Load(saved.Map, saved.Id.ToString("N")); }, loaded =>
@@ -108,7 +110,8 @@ public sealed partial class KeranStratPlugin
         _testGroupIndex++;
         if (_testGroupIndex < _testGroups.Length) { BeginReplay(_testGroups[_testGroupIndex]); return true; }
         var report = new { Result = _testAllPassed ? "PASS_SERVER_AUTOMATION" : "FAIL_SYNC", Abi = _api!.AbiVersion,
-            Frames = _testTrack!.Ticks.Length, RecordedDisplacement = _testDisplacement, AwpAndTwoFlashbangs = _testLoadoutPassed,
+            Frames = _testTrack!.Ticks.Length, TrimmedFrames = _tactic!.Tracks[1].Ticks.Length,
+            RecordedDisplacement = _testDisplacement, AwpAndTwoFlashbangs = _testLoadoutPassed,
             Cases = _testCaseReports,
             HumanClientTested = false, GrenadesTested = false, TimeUtc = DateTimeOffset.UtcNow };
         File.WriteAllText(Path.Combine(_dataRoot, "selftest-report.json"), System.Text.Json.JsonSerializer.Serialize(report));

@@ -201,6 +201,33 @@ Test("old archives without ammo stacks retain backward compatibility", () =>
     var tactic = Fixture(); var store = new FileTacticStore(Path.Combine(temp, "old-ammo")); store.Save(tactic);
     Check(store.Load(tactic.Map, tactic.Name).Tracks.Values.All(t => t.Ammo.Length == 0));
 });
+Test("tail trim aligns ticks, command frames and variable-length subtick streams", () =>
+{
+    var tactic = Fixture("Trim"); var original = tactic.Tracks[1];
+    original.Ammo = [0, 2, 30];
+    for (int i = 0; i < original.Ticks.Length; i++) original.Ticks[i].NumSubtick = (uint)(i % 3);
+    original.Subticks = Enumerable.Range(0, original.Ticks.Sum(t => (int)t.NumSubtick))
+        .Select(i => new SubtickMove { When = i / 1000f }).ToArray();
+    var trimmed = TrackEditing.TrimEnd(original, 300, tactic.TickInterval);
+    Check(trimmed.Ticks.Length == 44 && trimmed.Commands.Length == 44);
+    Check(trimmed.Subticks.Length == original.Ticks.Take(44).Sum(t => (int)t.NumSubtick));
+    Check(Bits(trimmed.Subticks, original.Subticks.Take(trimmed.Subticks.Length).ToArray()));
+    Check(trimmed.Ammo.SequenceEqual(original.Ammo) && trimmed.OffsetMs == original.OffsetMs);
+    Check(original.Ticks.Length == 64 && !ReferenceEquals(trimmed.Ticks, original.Ticks));
+    var candidate = tactic.Snapshot(); candidate.Tracks[1] = trimmed; candidate.Validate();
+    var store = new FileTacticStore(Path.Combine(temp, "trim")); store.Save(candidate);
+    Check(store.Load(candidate.Map, candidate.Name).Tracks[1].Ticks.Length == 44);
+    Check(tactic.Tracks[2].Ticks.Length == 64);
+});
+Test("trim rejects empty results and invalid input without changing original", () =>
+{
+    var track = Fixture().Tracks[1];
+    foreach (int ms in new[] { -1, 0, 1000, 120001 }) Reject(() => TrackEditing.TrimEnd(track, ms, 1d / 64));
+    Reject(() => TrackEditing.TrimEnd(track, 1, double.NaN));
+    Check(TrackEditing.TrimEnd(track, 984, 1d / 64).Ticks.Length == 1);
+    Check(track.Ticks.Length == 64);
+    track.Ticks[0].NumSubtick = 100; Reject(() => TrackEditing.TrimEnd(track, 1, 1d / 64));
+});
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
 

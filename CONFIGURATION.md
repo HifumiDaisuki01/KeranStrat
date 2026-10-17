@@ -37,3 +37,9 @@ PracticeCvars 默认包含 sv_cheats=1、mp_autoteambalance=0、mp_limitteams=0�
 不要在有人训练时热更底层程序集；普通权限和参数修改使用上述配置重载。
 
 `!ks kit` 保留已有主武器；`!ks kit awp` 可指定主武器。配置包含 flashbang 时补给两颗，其他投掷物按类别补给。训练中开放长时、全图购买，并在补给或出生时补充资金。开始录制仅恢复起点，保留当前配装；战术同时保存投掷物堆叠数量。
+
+训练阶段额外使用 mp_team_intro_time=0、mp_warmuptime=5、mp_warmup_pausetimer=0、mp_halftime=0、mp_maxrounds=999、mp_timelimit=0、mp_match_can_clinch=0。进入训练及训练切图时主动结束热身，并等待实际规则退出热身/冻结期。退出时恢复原值。
+
+`css_ks_stop` 可在客户端绑定按键；`!ks trim <毫秒> [队员]` 按服务器 Tick 向上取整裁剪，至少保留一帧，裁剪后需手动保存。
+
+训练禁用 mp_warmup_online_enabled 与 mp_warmup_offline_enabled，mp_warmuptime_all_players_connected=0、sv_warmup_to_freezetime_delay=0。进入训练时重置开局并持续核对热身、冻结状态后再开放操作。

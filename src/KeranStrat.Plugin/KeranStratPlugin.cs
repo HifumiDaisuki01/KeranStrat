@@ -34,7 +34,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.2.1";
+    public override string ModuleVersion => "0.2.2";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -103,6 +103,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         }
         catch (IOException) { /* diagnostics only */ }
         AddCommand("css_ks", "KeranStrat 战术录制与回放", Command);
+        AddCommand("css_ks_stop", "KeranStrat 快捷停止录制，可绑定 mouse3", StopShortcut);
         WatchConfiguration();
         RegisterListener<Listeners.OnTick>(Tick);
         RegisterListener<Listeners.OnMapStart>(TrainingMapStarted);
@@ -187,9 +188,10 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         if (!player.PawnIsAlive) throw new InvalidOperationException("请先出生。");
         _owner = player.SteamID; _ownerSlot = player.Slot;
     }
-    private void Command(CCSPlayerController? player, CommandInfo cmd)
+    private void Command(CCSPlayerController? player, CommandInfo cmd) => Command(player, cmd, null);
+    private void Command(CCSPlayerController? player, CommandInfo cmd, string? forcedAction)
     {
-        string action = cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help";
+        string action = forcedAction ?? (cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help");
         void Reply(string message) => cmd.ReplyToCommand("[KeranStrat] " + message);
         if (player != null)
         {
@@ -202,7 +204,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         if (action is "help" or "source")
         {
             Reply(action == "source" ? $"AGPL-3.0；Keran Technology；BotController: XBribo。源码: {Config.SourceUrl}" :
-                "!ks practice | exit | map <地图> | kit | new <名称> | record <1-5> | stop | play | replay <1-5> | remove <1-5> | reset | save | load <名称/ID> | list | delete <名称/ID> | copy <名称> | offset <1-5> <毫秒> | anchor | reload | status | cancel | source");
+                "!ks practice | exit | map <地图> | kit | new <名称> | record <1-5> | stop | trim <毫秒> [队员] | play | replay <1-5> | remove <1-5> | reset | save | load <名称/ID> | list | delete <名称/ID> | copy <名称> | offset <1-5> <毫秒> | anchor | reload | status | cancel | source；快捷停止绑定：bind mouse3 css_ks_stop");
             return;
         }
         try
@@ -212,6 +214,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 Reply($"mode={_trainingMode}, changing={_modeChanging}, state={_state}, fileBusy={_busy}, practice={_practice.Active}, ABI={_api?.AbiVersion.ToString() ?? "unavailable"}, ticks={_ticksSeen}, selftestPhase={_selfTestPhase}, tactic={_tactic?.Name ?? "none"}, roles={string.Join(',', _tactic?.Tracks.Keys.Order().ToArray() ?? [])}");
                 foreach (var line in _lastReport) Reply(line);
                 Reply("lastError=" + _lastError);
+                var rules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
+                Reply($"warmup={rules?.WarmupPeriod}, freeze={rules?.FreezePeriod}, setupIssued={_trainingSetupIssued}, phase={rules?.GamePhase}, started={rules?.HasMatchStarted}, waitingResume={rules?.MatchWaitingForResume}");
                 return;
             }
             if (action == "selftest") { StartSelfTest(player, cmd); return; }
@@ -254,6 +258,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                     _owner = player.SteamID; _ownerSlot = player.Slot;
                     _tactic = new Tactic { Name = name, Map = Server.MapName, Creator = player.SteamID.ToString(), Team = player.TeamNum,
                         TickInterval = Server.TickInterval, GameVersion = _gameVersion };
+                    _lastRecordedRole = 0; _hudUntil = 0;
                     _anchor = Inventory.Capture(player, 1); Reply("已创建 " + name + "；起点及装备已记住。"); break;
                 case "anchor":
                     RequireReady(player); _anchor = Inventory.Capture(player, 1); Reply("已更新后续新队员的初始位置和装备。"); break;
@@ -271,6 +276,16 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 case "remove":
                     if (_tactic == null || !_tactic.Tracks.Remove(Role(cmd.GetArg(2)))) throw new InvalidOperationException("该队员没有录制。");
                     Reply("已移除该队员，其他轨迹保留；!ks save 保存。"); break;
+                case "trim":
+                    if (_tactic == null) throw new InvalidOperationException("请先录制或加载战术。");
+                    int trimRole = cmd.ArgCount > 3 ? Role(cmd.GetArg(3)) : _lastRecordedRole;
+                    if (!_tactic.Tracks.TryGetValue(trimRole, out var original))
+                        throw new InvalidOperationException("没有刚录好的轨迹。使用 !ks trim <毫秒> <队员编号> 指定队员。");
+                    if (!int.TryParse(cmd.GetArg(2), out int trimMs)) throw new ArgumentException("用法：!ks trim 300 [队员编号]。");
+                    var trimmed = TrackEditing.TrimEnd(original, trimMs, _tactic.TickInterval);
+                    var edit = _tactic.Snapshot(); edit.Tracks[trimRole] = trimmed; edit.Validate(MaxTicks);
+                    _tactic.Tracks[trimRole] = trimmed;
+                    Reply($"队员 {trimRole} 已裁掉末尾 {(original.Ticks.Length - trimmed.Ticks.Length) * _tactic.TickInterval * 1000:F1} 毫秒，剩余 {Duration(trimmed.Ticks.Length * _tactic.TickInterval)}。!ks save 保存。"); break;
                 case "copy":
                     if (_tactic == null) throw new InvalidOperationException("尚无战术。");
                     string copyName = Args(cmd, 2); Tactic.ValidateName(copyName);
@@ -286,6 +301,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                         if (Math.Abs(t.TickInterval - Server.TickInterval) > 0.000001 || t.GameVersion != _gameVersion)
                         { Notify("录制的 Tick 间隔或游戏版本不同，已拒绝加载；请用原版本或重新录制。"); return; }
                         _tactic = t; _owner = player.SteamID; _ownerSlot = player.Slot; _anchor = t.Tracks.Values.FirstOrDefault();
+                        _lastRecordedRole = 0; _hudUntil = 0;
                         Notify("已加载 " + t.Name + "，队员数 " + t.Tracks.Count);
                     }); Reply("正在加载。"); break;
                 case "list":
@@ -322,6 +338,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         _recording = new Track { Role = role, OffsetMs = initial.OffsetMs };
         _countdownAt = Server.TickCount + ReplayCoordinator.ToTicks(Config.CountdownSeconds * 1000, Server.TickInterval);
         _lastCountdown = -1; _state = "countdown";
+        _hudNextTick = 0; _hudUntil = 0;
     }
     private void FinishRecording()
     {
@@ -334,6 +351,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             TickInterval = _tactic.TickInterval, Tracks = new() { [_recording.Role] = _recording } };
         candidate.Validate(MaxTicks);
         _tactic.Tracks[_recording.Role] = _recording;
+        RecordingFinishedHud(_recording.Role, motion.ticks.Length);
         Notify($"队员 {_recording.Role} 已录制 {motion.ticks.Length} 帧，{motion.subs.Length} Subtick；其他队员未改。!ks save 保存。");
         _recording = null; _state = "idle";
     }
@@ -392,6 +410,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         { try { job(); } catch (Exception e) { Notify("完成回调失败: " + e.Message); } }
         try
         {
+            RecordingHudTick();
             if (TrainingTick()) return;
             if (SelfTestTick()) return;
             if (_state is "countdown" or "recording")
@@ -471,6 +490,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     }
     private void Abort(string reason, bool exitPractice)
     {
+        _hudUntil = 0; _hudNextTick = 0;
         _generation++; _busy = false;
         try { if (_state == "recording") _api?.StopRecord(_ownerSlot); } catch (Exception e) { Log("停止录制: " + e.Message); }
         _recording = null; _replay?.Cancel(); CleanupBots(); CancelSelfTest(); _state = "idle";

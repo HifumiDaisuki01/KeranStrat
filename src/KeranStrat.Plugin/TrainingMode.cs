@@ -16,6 +16,9 @@ public sealed partial class KeranStratPlugin
     private string _targetMap = "";
     private bool _targetMapStarted;
     private int _modeApplyTick;
+    private bool _trainingSetupIssued;
+    private int _trainingReadyAt;
+    private int _trainingStableSince;
     private long _modeRequestTime;
     private readonly List<string> _modeReports = [];
     private FileSystemWatcher? _configWatcher;
@@ -90,6 +93,7 @@ public sealed partial class KeranStratPlugin
     {
         if (_modeChanging) throw new InvalidOperationException("模式切换中。");
         _targetMap = map; _targetPractice = practice; _targetMapStarted = false;
+        _trainingSetupIssued = false;
         _modeRequestTime = Stopwatch.GetTimestamp(); _modeChanging = true;
         Server.PrintToChatAll(practice ? "[KeranStrat] 即将载入战术训练地图，请稍候。" : "[KeranStrat] 训练结束，即将恢复 Dust2 死斗。");
         try { SetRules(practice); Server.ExecuteCommand("map " + map); }
@@ -98,6 +102,7 @@ public sealed partial class KeranStratPlugin
     private void TrainingMapStarted(string map)
     {
         _tactic = null; _anchor = null;
+        _lastRecordedRole = 0; _hudUntil = 0; _hudNextTick = 0; _trainingSetupIssued = false;
         if (_modeChanging)
         {
             _targetMapStarted = map == _targetMap;
@@ -130,7 +135,23 @@ public sealed partial class KeranStratPlugin
         }
         if (_targetPractice)
         {
-            _practice.Apply(); _trainingMode = "Practice";
+            if (!_trainingSetupIssued)
+            {
+                _practice.Apply();
+                // Queue after training convars, then wait for the engine's real warmup transition.
+                Server.ExecuteCommand("mp_warmup_end");
+                Server.ExecuteCommand("mp_restartgame 1");
+                _trainingSetupIssued = true;
+                _trainingStableSince = 0;
+                _trainingReadyAt = Server.TickCount + ReplayCoordinator.ToTicks(5000, Server.TickInterval);
+                return true;
+            }
+            if (Server.TickCount < _trainingReadyAt) return true;
+            var rules = Utilities.FindAllEntitiesByDesignerName<CCSGameRulesProxy>("cs_gamerules").FirstOrDefault()?.GameRules;
+            if (rules == null || rules.WarmupPeriod || rules.FreezePeriod) { _trainingStableSince = 0; return true; }
+            if (_trainingStableSince == 0) _trainingStableSince = Server.TickCount;
+            if (Server.TickCount - _trainingStableSince < ReplayCoordinator.ToTicks(2000, Server.TickInterval)) return true;
+            _trainingMode = "Practice";
         }
         else
         {
