@@ -26,3 +26,18 @@
 练习参数在修改前写入 practice-recovery.json；正常退出恢复并移除。异常退出时，下次加载恢复快照。只创建和清理本插件拥有的 BOT，不卸载现有插件、不更改正常 cfg。已开始的文件写入可能在取消后完成，但旧回调不会污染新会话。
 
 后续 Web 可通过 ITacticStore 数据访问接口接入；当前不开放远程写入 API、不暴露 RCON。
+
+## Defense 模块
+
+- Core/Defense.cs：独立 DefenseBotController、每 BOT Waiting/Replaying/CombatAI/Dead 状态、本地交接时间校验、成绩与场景模型。
+- DefenseCommands.cs：独立 css_ksd 入口、DefenseEnabled/DefenseAllowedSteamIDs 统一鉴权、只读异步加载、每玩家场景 JSON 持久化。
+- DefenseManager.cs：Defense 回合生命周期、CT 重置、T BOT 身份绑定、三秒倒计时、判定、循环、临时 ConVar 快照和实体清理。
+- DefenseProbe.cs / DefenseSelfTest.cs：仅空服控制台使用的原生交火与循环验证。
+
+原版 _state/_busy/切图标志和 DefenseBusy 构成轻量互斥；Defense 加载或训练期间拒绝原版世界操作，原版操作期间拒绝 Defense。双方共享 PracticeEnvironment 与模式底层，各自保存战术/状态，普通原版命令不会获得 Defense 权限。显式退出和全局地图卸载负责共同停止。
+
+NativeReplayEngine.HandoffToCombatAI 顺序为 StopReplay（清除回放状态和 Pawn 注入绑定）→ Unlock All/Aim/Weapon → 核对状态；不移除实体所有权。上游 CCSBot::Update/Upkeep/UpdateLookAngles 在回放或相应锁存在时跳过原生更新，释放后恢复。最终回合清理才 Stop 并按控制器身份和 UserId 踢出 BOT。
+
+DefenseBotController 使用独立策略：死亡是正常事件；控制器断线、加载失败和提前终止为故障；交接不结束本轮，所有 BOT 消灭、CT 死亡或超时才结束。本地交接 Tick 与每角色 OffsetTicks 分开，所有启动和交接由一个 OnTick 推进。原版 ReplayCoordinator 无交接行为。
+
+临时实体每200ms追踪，使用带序列号的实体句柄及参与者归属，防止重用指针误删。场景文件与原 .ks 分离；代际标记阻止过期后台加载覆盖换图/取消后的状态。Defense 的参数恢复先于 Practice 恢复，避免异常重启后把练习值当作最终正常值。

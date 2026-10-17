@@ -228,6 +228,7 @@ Test("trim rejects empty results and invalid input without changing original", (
     Check(track.Ticks.Length == 64);
     track.Ticks[0].NumSubtick = 100; Reject(() => TrackEditing.TrimEnd(track, 1, 1d / 64));
 });
+DefenseTests.Run(Test, Check, Reject, () => Fixture(), temp);
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
 

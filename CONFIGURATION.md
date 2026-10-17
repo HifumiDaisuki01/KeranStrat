@@ -43,3 +43,17 @@ PracticeCvars 默认包含 sv_cheats=1、mp_autoteambalance=0、mp_limitteams=0�
 `css_ks_stop` 可在客户端绑定按键；`!ks trim <毫秒> [队员]` 按服务器 Tick 向上取整裁剪，至少保留一帧，裁剪后需手动保存。
 
 训练禁用 mp_warmup_online_enabled 与 mp_warmup_offline_enabled，mp_warmuptime_all_players_connected=0、sv_warmup_to_freezetime_delay=0。进入训练时重置开局并持续核对热身、冻结状态后再开放操作。
+
+## Defense 独立配置
+
+| 参数 | 默认 | 作用 |
+|---|---|---|
+| DefenseEnabled | true | Defense 总开关，不依赖原版 Enabled |
+| DefenseAllowedSteamIDs | [] | 独立 SteamID64 字符串白名单；不继承 AllowedSteamIDs |
+| DefenseRoundSeconds | 120 | 新场景默认单轮上限，10～600秒 |
+
+原版 Enabled/AllowedSteamIDs 与 Defense 开关/白名单互不继承。关闭 Defense 或移除训练玩家的权限会停止其训练，保留 Practice。只具备 Defense 权限也可以独立 practice、load、position、start 和 exit。
+
+Defense 场景单独保存在 data/defense/<SteamID64>/<战术ID>.json；包含防守 Track、Difficulty、Repeat、RoundSeconds 和 HandoffMilliseconds。`null` 交接值表示 auto。每个交接时间从该队员自己的轨迹起点计算，原 OffsetMs 不变，不能超出轨迹长度。
+
+运行时临时设置 bot_dont_shoot=0、bot_difficulty=难度-1、bot_stop=0、bot_zombie=0、bot_quota_mode=normal 和 mp_respawn_immunitytime=0，按实际 BOT 数维护 quota；结束后恢复快照。Defense 不修改 server.cfg，不改写原版 .ks。完整说明见 DEFENSE.md。

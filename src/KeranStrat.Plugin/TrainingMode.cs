@@ -37,7 +37,7 @@ public sealed partial class KeranStratPlugin
     private void ReloadConfigurationIfChanged()
     {
         long changed = Interlocked.Read(ref _configChangedAt);
-        if (changed == 0 || _modeChanging || _busy || _state != "idle" || Stopwatch.GetElapsedTime(changed).TotalSeconds < .5) return;
+        if (changed == 0 || _modeChanging || _busy || _defenseLoading || _state != "idle" || Stopwatch.GetElapsedTime(changed).TotalSeconds < .5) return;
         Interlocked.Exchange(ref _configChangedAt, 0);
         try { ReloadSettings(); Log("配置文件已安全热重载。"); }
         catch (Exception e) { Log("配置文件重载失败，保留原有效配置: " + e.Message); }
@@ -95,13 +95,15 @@ public sealed partial class KeranStratPlugin
         _targetMap = map; _targetPractice = practice; _targetMapStarted = false;
         _trainingSetupIssued = false;
         _modeRequestTime = Stopwatch.GetTimestamp(); _modeChanging = true;
-        Server.PrintToChatAll(practice ? "[KeranStrat] 即将载入战术训练地图，请稍候。" : "[KeranStrat] 训练结束，即将恢复 Dust2 死斗。");
+        string prefix = _modeDefense ? "[KeranStrat Defense] " : "[KeranStrat] ";
+        Server.PrintToChatAll(prefix + (practice ? "即将载入战术训练地图，请稍候。" : "训练结束，即将恢复 Dust2 死斗。"));
         try { SetRules(practice); Server.ExecuteCommand("map " + map); }
         catch { _modeChanging = false; throw; }
     }
     private void TrainingMapStarted(string map)
     {
         _tactic = null; _anchor = null;
+        _defenseTactic = null; _defenseSettings = null;
         _lastRecordedRole = 0; _hudUntil = 0; _hudNextTick = 0; _hudVisible = false; _trainingSetupIssued = false;
         if (_modeChanging)
         {
@@ -121,7 +123,7 @@ public sealed partial class KeranStratPlugin
         if (Stopwatch.GetElapsedTime(_modeRequestTime).TotalSeconds > 60)
         {
             _modeChanging = false; _lastError = "模式/地图加载超时；未声明切换成功。请检查服务器并使用 !ks exit。";
-            Notify(_lastError); return true;
+            if (_modeDefense) DefenseNotify(_lastError); else Notify(_lastError); return true;
         }
         if (!_targetMapStarted || Server.TickCount < _modeApplyTick) return true;
         string type = ConVar.Find("game_type")?.StringValue ?? "missing";
@@ -131,7 +133,7 @@ public sealed partial class KeranStratPlugin
             if (Stopwatch.GetElapsedTime(_modeRequestTime).TotalSeconds < 10) return true;
             _modeChanging = false;
             _lastError = $"实际模式不符：map={Server.MapName} game_type={type} game_mode={mode}；未假定训练成功。";
-            Notify(_lastError); return true;
+            if (_modeDefense) DefenseNotify(_lastError); else Notify(_lastError); return true;
         }
         if (_targetPractice)
         {
@@ -152,6 +154,8 @@ public sealed partial class KeranStratPlugin
             if (_trainingStableSince == 0) _trainingStableSince = Server.TickCount;
             if (Server.TickCount - _trainingStableSince < ReplayCoordinator.ToTicks(2000, Server.TickInterval)) return true;
             _trainingMode = "Practice";
+            foreach (var player in Utilities.GetPlayers().Where(p => p.IsValid && !p.IsBot))
+                if (AccessPolicy.Allows(Config.DefenseEnabled, _defenseAllowed, player.AuthorizedSteamID?.SteamId64.ToString())) DefensePracticeFunds(player);
         }
         else
         {
@@ -159,8 +163,9 @@ public sealed partial class KeranStratPlugin
         }
         _modeChanging = false;
         string result = $"mode={_trainingMode} map={Server.MapName} game_type={type} game_mode={mode}";
-        _modeReports.Add(result); Notify("已核实 " + result);
-        Server.PrintToChatAll(_targetPractice ? "[KeranStrat] 战术训练已就绪。结束后 !ks exit 恢复 Dust2 死斗。" : "[KeranStrat] 已恢复 Dust2 死斗。");
+        _modeReports.Add(result); if (_modeDefense) DefenseNotify("已核实 " + result); else Notify("已核实 " + result);
+        string prefix = _modeDefense ? "[KeranStrat Defense] " : "[KeranStrat] ";
+        Server.PrintToChatAll(prefix + (_targetPractice ? "战术训练已就绪。结束后 " + (_modeDefense ? "!ksd exit" : "!ks exit") + " 恢复 Dust2 死斗。" : "已恢复 Dust2 死斗。"));
         File.WriteAllText(Path.Combine(_dataRoot, "mode-test-report.json"), JsonSerializer.Serialize(_modeReports));
         return true;
     }
@@ -174,7 +179,8 @@ public sealed partial class KeranStratPlugin
         OnConfigParsed(settings);
         _store = new FileTacticStore(_dataRoot, Config.MaxTacticsPerMap, Config.MaxFileMegabytes * 1024L * 1024, MaxTicks, Config.MaxStorageMegabytes * 1024L * 1024);
         if (!_practice.Active) _practice = new PracticeEnvironment(Path.Combine(_dataRoot, "practice-recovery.json"), Config.PracticeCvars);
-        if (!Config.Enabled && _trainingMode == "Practice") ExitTraining();
+        if (!Config.DefenseEnabled && DefenseBusy) StopDefense("Defense 配置已禁用");
+        if (!Config.Enabled && _trainingMode == "Practice" && !_modeDefense && !DefenseBusy) ExitTraining();
     }
     private static readonly HashSet<string> PrimaryWeapons = new(StringComparer.Ordinal)
     {

@@ -14,6 +14,9 @@ public sealed class KeranStratConfig : BasePluginConfig
 {
     public bool Enabled { get; set; } = true;
     public string[] AllowedSteamIDs { get; set; } = [];
+    public bool DefenseEnabled { get; set; } = true;
+    public string[] DefenseAllowedSteamIDs { get; set; } = [];
+    public int DefenseRoundSeconds { get; set; } = 120;
     public string DefaultMap { get; set; } = "de_dust2";
     public string DefaultGameMode { get; set; } = "deathmatch";
     public int MaxRecordedPlayers { get; set; } = 5;
@@ -34,7 +37,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.2.3";
+    public override string ModuleVersion => "0.3.0";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -71,7 +74,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         if (config.CountdownSeconds is < 1 or > 10 || config.MaxRecordingSeconds is < 1 or > 180 ||
             config.MaxTacticsPerMap is < 1 or > 1000 || config.MaxFileMegabytes is < 1 or > 64 || config.MaxStorageMegabytes is < 16 or > 1024 ||
             config.MaxRecordedPlayers is < 1 or > 5 || config.DefaultMap != "de_dust2" || config.DefaultGameMode != "deathmatch" ||
-            config.AllowedSteamIDs.Any(s => !AccessPolicy.IsSteamId64(s)) || config.PracticeGrenades.Length > 5 ||
+            config.AllowedSteamIDs.Any(s => !AccessPolicy.IsSteamId64(s)) || config.DefenseAllowedSteamIDs.Any(s => !AccessPolicy.IsSteamId64(s)) ||
+            config.DefenseRoundSeconds is < 10 or > 600 || config.PracticeGrenades.Length > 5 ||
             config.PracticeGrenades.Any(s => !System.Text.RegularExpressions.Regex.IsMatch(s, "^weapon_(smokegrenade|flashbang|hegrenade|molotov|incgrenade|decoy)$")))
             throw new ArgumentException("KeranStrat 配置超出安全范围或 SteamID64/装备格式无效。");
         var merged = new Dictionary<string, string>(PracticeEnvironment.Defaults);
@@ -83,6 +87,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         config.PracticeCvars = merged;
         Config = config;
         _allowed = new HashSet<string>(config.AllowedSteamIDs, StringComparer.Ordinal);
+        _defenseAllowed = new HashSet<string>(config.DefenseAllowedSteamIDs, StringComparer.Ordinal);
     }
     private int MaxTicks => checked((int)Math.Ceiling(Config.MaxRecordingSeconds / (double)Server.TickInterval));
     private static PluginCapability<IBotControllerApi> Capability => new("botcontroller:api");
@@ -94,6 +99,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         Directory.CreateDirectory(_dataRoot);
         _store = new FileTacticStore(_dataRoot, Config.MaxTacticsPerMap, Config.MaxFileMegabytes * 1024L * 1024, MaxTicks, Config.MaxStorageMegabytes * 1024L * 1024);
         _practice = new PracticeEnvironment(Path.Combine(_dataRoot, "practice-recovery.json"), Config.PracticeCvars);
+        RecoverDefenseEnvironment();
         _practice.Recover();
         try
         {
@@ -104,13 +110,18 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         catch (IOException) { /* diagnostics only */ }
         AddCommand("css_ks", "KeranStrat 战术录制与回放", Command);
         AddCommand("css_ks_stop", "KeranStrat 快捷停止录制，可绑定 mouse3", StopShortcut);
+        RegisterDefenseProbe();
+        AddCommand("css_ksd", "KeranStrat Defense 防守训练", DefenseCommand);
+        AddCommand("css_ksd_selftest", "Console-only empty-server Defense round automation", StartDefenseSelfTest);
         WatchConfiguration();
         RegisterListener<Listeners.OnTick>(Tick);
         RegisterListener<Listeners.OnMapStart>(TrainingMapStarted);
-        RegisterListener<Listeners.OnMapEnd>(() => { Abort("地图结束", false); _tactic = null; _anchor = null; });
+        RegisterListener<Listeners.OnMapEnd>(() => { StopDefense("地图结束"); Abort("地图结束", false); _tactic = null; _anchor = null; _defenseTactic = null; _defenseSettings = null; });
         RegisterEventHandler<EventPlayerDisconnect>((e, _) =>
         {
-            if (e.Userid != null && e.Userid.Slot == _ownerSlot) { Abort("操作玩家断线", false); _owner = 0; _ownerSlot = -1; }
+            if (e.Userid != null && e.Userid.Slot == _defenseOwnerSlot) StopDefense("防守玩家断线");
+            if (e.Userid != null && e.Userid.Slot == _ownerSlot)
+            { if (_state != "idle" || _busy) Abort("操作玩家断线", false); _owner = 0; _ownerSlot = -1; }
             return HookResult.Continue;
         }, HookMode.Pre);
         RegisterEventHandler<EventPlayerConnectFull>((e, _) =>
@@ -122,13 +133,16 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
             var p = e.Userid;
-            if (p is { IsValid: true, IsBot: false } && _trainingMode == "Practice" && !_modeChanging && _state == "idle")
+            if (p is { IsValid: true, IsBot: false } && _trainingMode == "Practice" && !_modeChanging && _state == "idle" && !DefenseBusy)
                 Server.NextFrame(() =>
                 {
                     try
                     {
-                        if (p.IsValid && p.PawnIsAlive && _trainingMode == "Practice" && _state == "idle" &&
-                            AccessPolicy.Allows(Config.Enabled, _allowed, p.AuthorizedSteamID?.SteamId64.ToString())) GivePracticeKit(p);
+                        if (p.IsValid && p.PawnIsAlive && _trainingMode == "Practice" && _state == "idle" && !DefenseBusy)
+                        {
+                            if (AccessPolicy.Allows(Config.Enabled, _allowed, p.AuthorizedSteamID?.SteamId64.ToString())) GivePracticeKit(p);
+                            else if (AccessPolicy.Allows(Config.DefenseEnabled, _defenseAllowed, p.AuthorizedSteamID?.SteamId64.ToString())) DefensePracticeFunds(p);
+                        }
                     }
                     catch (Exception error) { Log("训练装备恢复失败: " + error.Message); }
                 });
@@ -209,6 +223,11 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         }
         try
         {
+            if (DefenseBusy && action is not ("help" or "source" or "status"))
+            {
+                if (action == "exit") StopDefense("原版指令退出训练");
+                else throw new InvalidOperationException("Defense 训练操作进行中，请先 !ksd stop。");
+            }
             if (action == "status")
             {
                 Reply($"mode={_trainingMode}, changing={_modeChanging}, state={_state}, fileBusy={_busy}, practice={_practice.Active}, ABI={_api?.AbiVersion.ToString() ?? "unavailable"}, ticks={_ticksSeen}, selftestPhase={_selfTestPhase}, tactic={_tactic?.Name ?? "none"}, roles={string.Join(',', _tactic?.Tracks.Keys.Order().ToArray() ?? [])}");
@@ -232,9 +251,10 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 if (player == null && OtherHumans(0)) throw new InvalidOperationException("自动控制台模式测试要求空服；游戏内白名单用户可提示后切换。");
                 if (!Config.Enabled) throw new InvalidOperationException("KeranStrat 已禁用。");
                 if (player != null) RequireOwner(player);
+                _modeDefense = false;
                 if (action == "exit" || (action == "practice" && cmd.GetArg(2) == "off")) ExitTraining();
                 else if (action == "map") ChangeTrainingMap(cmd.GetArg(2));
-                else EnterTraining();
+                else { _modeDefense = false; EnterTraining(); }
                 Reply("已请求切换，加载完成后会核对地图与游戏规则。"); return;
             }
             if (player == null) throw new InvalidOperationException("此指令需要真人在游戏内操作；服务端可用 status/selftest/cancel。");
@@ -412,6 +432,9 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         {
             RecordingHudTick();
             if (TrainingTick()) return;
+            if (DefenseProbeTick()) return;
+            DefenseTick();
+            DefenseSelfTestTick();
             if (SelfTestTick()) return;
             if (_state is "countdown" or "recording")
             {
@@ -490,6 +513,9 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     }
     private void Abort(string reason, bool exitPractice)
     {
+        EndDefenseSelfTest();
+        StopDefense(reason);
+        StopDefenseProbe();
         try { ClearRecordingHud(); } catch (InvalidOperationException) { /* player disconnected */ }
         _hudUntil = 0; _hudNextTick = 0;
         _generation++; _busy = false;

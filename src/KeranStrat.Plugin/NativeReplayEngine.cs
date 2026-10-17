@@ -5,20 +5,34 @@ using KeranStrat.Core;
 
 namespace KeranStrat.Plugin;
 
-internal sealed class NativeReplayEngine(IBotControllerApi api) : IReplayEngine
+internal sealed class NativeReplayEngine(IBotControllerApi api) : IDefenseReplayEngine
 {
     private readonly Dictionary<int, nint> _owned = [];
+    private readonly Dictionary<int, int> _userIds = [];
     private readonly Dictionary<int, Track> _motions = [];
     internal static CCSPlayerController? Player(int slot) => slot < 0 ? null : Utilities.GetPlayerFromSlot(slot);
-    private bool Owns(int slot) => _owned.TryGetValue(slot, out var handle) && Player(slot) is { IsValid: true, IsBot: true } bot && bot.Handle == handle;
+    private bool Owns(int slot) => _owned.TryGetValue(slot, out var handle) && Player(slot) is { IsValid: true, IsBot: true } bot && bot.Handle == handle && _userIds.TryGetValue(slot, out int id) && bot.UserId == id;
     public bool Start(int slot) => Owns(slot) && api.Lock(slot, LockKind.All) && api.StartReplay(slot);
     public void Stop(int slot)
     {
         if (Owns(slot)) { api.StopReplay(slot); api.Unlock(slot, LockKind.All); }
         _owned.Remove(slot);
+        _userIds.Remove(slot);
         _motions.Remove(slot);
     }
     public bool IsPlaying(int slot) => api.IsReplaying(slot);
+    public bool IsConnected(int slot) => Owns(slot);
+    public bool HandoffToCombatAI(int slot)
+    {
+        if (!Owns(slot) || !IsAlive(slot)) return false;
+        if (!api.StopReplay(slot)) return false;
+        bool released = api.Unlock(slot, LockKind.All);
+        released &= api.Unlock(slot, LockKind.Aim);
+        released &= api.Unlock(slot, LockKind.Weapon);
+        // Keep _owned: combat bots still belong to this session and must be cleaned later.
+        return released && !api.IsReplaying(slot) && !api.IsLocked(slot, LockKind.All) &&
+            !api.IsLocked(slot, LockKind.Aim) && api.GetWeaponLock(slot) == LockTarget.None;
+    }
     public int Cursor(int slot) => api.ReplayCursor(slot);
     public bool IsAlive(int slot) => Owns(slot) && Player(slot) is { PawnIsAlive: true };
     public float? PositionError(int slot, int cursor)
@@ -36,6 +50,7 @@ internal sealed class NativeReplayEngine(IBotControllerApi api) : IReplayEngine
         if (!bot.IsBot || !bot.PawnIsAlive || bot.PlayerPawn.Value == null)
             throw new InvalidOperationException("BOT 尚未出生。");
         _owned[bot.Slot] = bot.Handle;
+        _userIds[bot.Slot] = bot.UserId ?? throw new InvalidOperationException("BOT UserId 尚不可用。");
         _motions[bot.Slot] = track;
         if (!api.SetReplayPawn(bot.Slot, bot.PlayerPawn.Value.Handle) || !api.Lock(bot.Slot, LockKind.All))
             throw new InvalidOperationException("无法绑定或锁定 BOT。");
