@@ -34,7 +34,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.2.0";
+    public override string ModuleVersion => "0.2.1";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -247,7 +247,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             {
                 case "kit":
                     if (_trainingMode != "Practice" || !player.PawnIsAlive) throw new InvalidOperationException("请先进入训练并选择 T/CT 出生。");
-                    GivePracticeKit(player); Reply("已补充步枪、手枪、刀、防具及投掷物；!ks anchor 更新后续录制起点。"); break;
+                    GivePracticeKit(player, cmd.ArgCount > 2 ? cmd.GetArg(2) : null); Reply("已补齐装备和训练资金；保留已有主武器。可 !ks kit awp，或按 B 自由购买（不限地点/时间）。"); break;
                 case "new":
                     string name = Args(cmd, 2); Tactic.ValidateName(name);
                     if (player.TeamNum is not (2 or 3) || !player.PawnIsAlive) throw new InvalidOperationException("请先选择 T/CT 并出生。");
@@ -317,7 +317,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     private void StartRecording(CCSPlayerController player, int role)
     {
         var initial = _tactic!.Tracks.GetValueOrDefault(role) ?? _anchor ?? Inventory.Capture(player, role);
-        Inventory.Restore(player, initial);
+        // Keep the loadout the player has just bought; only reuse the role's starting pose.
+        Inventory.RestorePose(player, initial.Initial);
         _recording = new Track { Role = role, OffsetMs = initial.OffsetMs };
         _countdownAt = Server.TickCount + ReplayCoordinator.ToTicks(Config.CountdownSeconds * 1000, Server.TickInterval);
         _lastCountdown = -1; _state = "countdown";

@@ -183,6 +183,24 @@ Test("empty tactics cannot start replay; total storage quota spans maps", () =>
     Reject(() => limited.Save(Fixture("another", "de_dust2")));
     Check(limited.Load(first.Map, first.Name).Tracks.Count == 5);
 });
+Test("AWP and two flashbangs preserve ammo stacks across snapshot and archive", () =>
+{
+    var tactic = Fixture("AWP 双闪");
+    tactic.Tracks[1].Equipment = [new("weapon_awp", 10, 30), new("weapon_flashbang")];
+    tactic.Tracks[1].Ammo = new ushort[32];
+    tactic.Tracks[1].Ammo[14] = 2; // Synthetic index: verifies lossless storage, not a game-specific enum.
+    var store = new FileTacticStore(Path.Combine(temp, "awp-flashes"));
+    store.Save(tactic.Snapshot()); var loaded = store.Load(tactic.Map, tactic.Name);
+    Check(loaded.Tracks[1].Equipment[0].ClassName == "weapon_awp");
+    Check(loaded.Tracks[1].Ammo.SequenceEqual(tactic.Tracks[1].Ammo));
+    Check(loaded.Tracks[1].Equipment.Count(e => e.ClassName == "weapon_flashbang") == 1);
+    tactic.Tracks[1].Ammo = new ushort[257]; Reject(() => tactic.Validate());
+});
+Test("old archives without ammo stacks retain backward compatibility", () =>
+{
+    var tactic = Fixture(); var store = new FileTacticStore(Path.Combine(temp, "old-ammo")); store.Save(tactic);
+    Check(store.Load(tactic.Map, tactic.Name).Tracks.Values.All(t => t.Ammo.Length == 0));
+});
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
 

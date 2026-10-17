@@ -155,14 +155,41 @@ public sealed partial class KeranStratPlugin
         if (!_practice.Active) _practice = new PracticeEnvironment(Path.Combine(_dataRoot, "practice-recovery.json"), Config.PracticeCvars);
         if (!Config.Enabled && _trainingMode == "Practice") ExitTraining();
     }
-    private void GivePracticeKit(CCSPlayerController player)
+    private static readonly HashSet<string> PrimaryWeapons = new(StringComparer.Ordinal)
     {
+        "weapon_ak47", "weapon_m4a1", "weapon_m4a1_silencer", "weapon_awp", "weapon_ssg08",
+        "weapon_aug", "weapon_sg556", "weapon_famas", "weapon_galilar", "weapon_g3sg1", "weapon_scar20",
+        "weapon_mac10", "weapon_mp9", "weapon_mp7", "weapon_mp5sd", "weapon_ump45", "weapon_p90", "weapon_bizon",
+        "weapon_nova", "weapon_xm1014", "weapon_mag7", "weapon_sawedoff", "weapon_m249", "weapon_negev"
+    };
+    private static bool IsGrenade(string name) => name is "weapon_smokegrenade" or "weapon_flashbang" or
+        "weapon_hegrenade" or "weapon_molotov" or "weapon_incgrenade" or "weapon_decoy";
+    private void GivePracticeKit(CCSPlayerController player, string? requestedPrimary = null)
+    {
+        string? selected = requestedPrimary == null ? null : "weapon_" + requestedPrimary.ToLowerInvariant().Replace("weapon_", "");
+        if (selected != null && !PrimaryWeapons.Contains(selected))
+            throw new ArgumentException("未知主武器。示例：!ks kit awp / ak47 / m4a1_silencer / ssg08。");
         var kit = Inventory.Capture(player, 1);
-        string primary = player.TeamNum == 2 ? "weapon_ak47" : "weapon_m4a1_silencer";
-        string pistol = player.TeamNum == 2 ? "weapon_glock" : "weapon_usp_silencer";
-        kit.Equipment = new[] { new Equipment("weapon_knife"), new Equipment(primary), new Equipment(pistol) }
-            .Concat(Config.PracticeGrenades.Select(n => new Equipment(n == "weapon_molotov" && player.TeamNum == 3 ? "weapon_incgrenade" : n))).ToArray();
+        var items = kit.Equipment.Where(e => !IsGrenade(e.ClassName) && (selected == null || !PrimaryWeapons.Contains(e.ClassName))).ToList();
+        if (!items.Any(e => PrimaryWeapons.Contains(e.ClassName)))
+            items.Add(new Equipment(selected ?? (player.TeamNum == 2 ? "weapon_ak47" : "weapon_m4a1_silencer")));
+        if (!items.Any(e => e.ClassName.StartsWith("weapon_knife", StringComparison.Ordinal))) items.Add(new Equipment("weapon_knife"));
+        if (!items.Any(e => e.ClassName is "weapon_glock" or "weapon_usp_silencer" or "weapon_hkp2000" or
+            "weapon_deagle" or "weapon_revolver" or "weapon_p250" or "weapon_fiveseven" or "weapon_tec9" or "weapon_cz75a" or "weapon_elite"))
+            items.Add(new Equipment(player.TeamNum == 2 ? "weapon_glock" : "weapon_usp_silencer"));
+        foreach (var name in Config.PracticeGrenades.Distinct(StringComparer.Ordinal))
+        {
+            items.Add(new Equipment(name == "weapon_molotov" && player.TeamNum == 3 ? "weapon_incgrenade" : name));
+            if (name == "weapon_flashbang") items.Add(new Equipment(name));
+        }
+        kit.Equipment = items.ToArray();
+        kit.Ammo = []; // Giving the configured kit initializes new grenade stack counts.
         kit.Health = 100; kit.Armor = 100; kit.Helmet = true;
         Inventory.Restore(player, kit);
+        if (player.InGameMoneyServices != null)
+        {
+            player.InGameMoneyServices.Account = 60000;
+            Utilities.SetStateChanged(player, "CCSPlayerController", "m_pInGameMoneyServices");
+        }
     }
 }

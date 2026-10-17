@@ -12,6 +12,9 @@ public sealed class Track
     public int OffsetMs { get; set; }
     public Pose Initial { get; set; } = new(0, 0, 0, 0, 0, 0);
     public Equipment[] Equipment { get; set; } = [];
+    // Grenade stacks live in player ammo, not in the number of weapon entities.
+    // Empty for older archives, which retain the engine's give-item defaults.
+    public ushort[] Ammo { get; set; } = [];
     public int Health { get; set; } = 100;
     public int Armor { get; set; }
     public bool Helmet { get; set; }
@@ -47,7 +50,7 @@ public sealed class Tactic
         Tracks = Tracks.ToDictionary(kv => kv.Key, kv => new Track
         {
             Role = kv.Value.Role, OffsetMs = kv.Value.OffsetMs, Initial = kv.Value.Initial,
-            Equipment = kv.Value.Equipment, Health = kv.Value.Health, Armor = kv.Value.Armor, Helmet = kv.Value.Helmet,
+            Equipment = kv.Value.Equipment, Ammo = kv.Value.Ammo, Health = kv.Value.Health, Armor = kv.Value.Armor, Helmet = kv.Value.Helmet,
             Ticks = kv.Value.Ticks, Subticks = kv.Value.Subticks, Commands = kv.Value.Commands
         })
     };
@@ -66,7 +69,7 @@ public sealed class Tactic
         {
             if (role is < 1 or > 5 || t.Role != role || t.OffsetMs is < 0 or > 120000 ||
                 t.Ticks.Length is < 1 || t.Ticks.Length > maxTicks || t.Commands.Length != t.Ticks.Length ||
-                t.Subticks.Length > maxTicks * 32 || t.Equipment.Length > 24)
+                t.Subticks.Length > maxTicks * 32 || t.Equipment.Length > 24 || t.Ammo.Length > 256)
                 throw new InvalidDataException($"队员 {role} 的轨迹数量或参数无效。");
             if (!Finite(t.Initial.X, t.Initial.Y, t.Initial.Z, t.Initial.Pitch, t.Initial.Yaw, t.Initial.Roll) ||
                 t.Equipment.Any(e => !System.Text.RegularExpressions.Regex.IsMatch(e.ClassName, "^weapon_[a-z0-9_]{1,48}$")))

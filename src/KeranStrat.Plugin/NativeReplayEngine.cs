@@ -47,6 +47,15 @@ internal sealed class NativeReplayEngine(IBotControllerApi api) : IReplayEngine
 
 internal static class Inventory
 {
+    public static int Count(CCSPlayerController player, string className)
+    {
+        var services = player.PlayerPawn.Value?.WeaponServices;
+        if (services == null) return 0;
+        var weapon = services.MyWeapons.Select(h => h.Value).FirstOrDefault(w => w is { IsValid: true } && w.DesignerName == className);
+        if (weapon == null) return 0;
+        var data = weapon.GetVData<CCSWeaponBaseVData>();
+        return data != null && data.PrimaryAmmoType < services.Ammo.Length ? services.Ammo[data.PrimaryAmmoType] : 1;
+    }
     public static Track Capture(CCSPlayerController player, int role)
     {
         var pawn = player.PlayerPawn.Value ?? throw new InvalidOperationException("玩家 Pawn 不存在。");
@@ -61,13 +70,15 @@ internal static class Inventory
                     items.Add(new Equipment(weapon.DesignerName, weapon.Clip1, weapon.ReserveAmmo.Length > 0 ? weapon.ReserveAmmo[0] : -1));
             }
         return new Track { Role = role, Initial = new(origin.X, origin.Y, origin.Z, angles.X, angles.Y, angles.Z),
-            Equipment = items.ToArray(), Health = pawn.Health, Armor = pawn.ArmorValue,
+            Equipment = items.ToArray(), Ammo = pawn.WeaponServices?.Ammo.ToArray() ?? [], Health = pawn.Health, Armor = pawn.ArmorValue,
             Helmet = pawn.ItemServices != null && new CCSPlayer_ItemServices(pawn.ItemServices.Handle).HasHelmet };
     }
     public static void Restore(CCSPlayerController player, Track track)
     {
         if (!player.PawnIsAlive) player.Respawn();
         var pawn = player.PlayerPawn.Value ?? throw new InvalidOperationException("玩家 Pawn 不存在。");
+        if (track.Ammo.Length > 0 && (pawn.WeaponServices == null || track.Ammo.Length != pawn.WeaponServices.Ammo.Length))
+            throw new InvalidOperationException("玩家弹药结构与战术不兼容。");
         player.RemoveWeapons();
         foreach (var item in track.Equipment) player.GiveNamedItem(item.ClassName);
         if (pawn.WeaponServices != null)
@@ -80,12 +91,22 @@ internal static class Inventory
                 if (item.Clip >= 0) weapon.Clip1 = item.Clip;
                 if (item.Reserve >= 0 && weapon.ReserveAmmo.Length > 0) weapon.ReserveAmmo[0] = item.Reserve;
             }
+        if (track.Ammo.Length > 0 && pawn.WeaponServices != null)
+        {
+            var ammo = pawn.WeaponServices.Ammo;
+            track.Ammo.AsSpan().CopyTo(ammo);
+            Utilities.SetStateChanged(pawn, "CBasePlayerPawn", "m_pWeaponServices");
+        }
         pawn.Health = Math.Clamp(track.Health, 1, 100); pawn.ArmorValue = Math.Clamp(track.Armor, 0, 100);
         if (pawn.ItemServices != null) new CCSPlayer_ItemServices(pawn.ItemServices.Handle).HasHelmet = track.Helmet;
-        var p = track.Initial;
+        RestorePose(player, track.Initial);
+        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
+    }
+    public static void RestorePose(CCSPlayerController player, Pose p)
+    {
+        var pawn = player.PlayerPawn.Value ?? throw new InvalidOperationException("玩家 Pawn 不存在。");
         pawn.Teleport(new CounterStrikeSharp.API.Modules.Utils.Vector(p.X, p.Y, p.Z),
             new CounterStrikeSharp.API.Modules.Utils.QAngle(p.Pitch, p.Yaw, p.Roll),
             new CounterStrikeSharp.API.Modules.Utils.Vector(0, 0, 0));
-        Utilities.SetStateChanged(pawn, "CBaseEntity", "m_iHealth");
     }
 }

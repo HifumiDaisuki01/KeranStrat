@@ -22,6 +22,7 @@ public sealed partial class KeranStratPlugin
     private int _testGroupIndex;
     private readonly List<object> _testCaseReports = [];
     private bool _testAllPassed;
+    private bool _testLoadoutPassed;
 
     // Console-only, refuses a live human session. This is not a substitute for human grenade tests.
     private void StartSelfTest(CCSPlayerController? player, CommandInfo command)
@@ -51,7 +52,15 @@ public sealed partial class KeranStratPlugin
             bot.PlayerName = _testBotName;
             Utilities.SetStateChanged(bot, "CBasePlayerController", "m_iszPlayerName");
             if (!bot.PawnIsAlive) { bot.Respawn(); return true; }
-            _testBotSlot = bot.Slot; _testTrack = Inventory.Capture(bot, 1);
+            _testBotSlot = bot.Slot;
+            GivePracticeKit(bot, "awp");
+            GivePracticeKit(bot); // Refilling must preserve the selected AWP.
+            _testTrack = Inventory.Capture(bot, 1);
+            Inventory.Restore(bot, _testTrack);
+            _testLoadoutPassed = _testTrack.Equipment.Any(e => e.ClassName == "weapon_awp") &&
+                !_testTrack.Equipment.Any(e => e.ClassName == "weapon_ak47") && Inventory.Count(bot, "weapon_flashbang") == 2 &&
+                Inventory.Capture(bot, 1).Ammo.SequenceEqual(_testTrack.Ammo);
+            if (!_testLoadoutPassed) throw new InvalidOperationException("AWP + 双闪装备保存/恢复测试失败。");
             _botIdentities[bot.Slot] = bot.Handle;
             if (!_api!.SetReplayPawn(bot.Slot, bot.PlayerPawn.Value!.Handle) || !_api.StartRecord(bot.Slot))
                 throw new InvalidOperationException("自测 BOT 原生录制启动失败。");
@@ -74,7 +83,7 @@ public sealed partial class KeranStratPlugin
             _tactic = new Tactic { Name = "selftest-" + Guid.NewGuid().ToString("N")[..8], Map = Server.MapName,
                 Creator = "server-selftest", TickInterval = Server.TickInterval, GameVersion = _gameVersion };
             for (int i = 1; i <= 5; i++)
-                _tactic.Tracks[i] = new Track { Role = i, Initial = _testTrack.Initial, Equipment = _testTrack.Equipment,
+                _tactic.Tracks[i] = new Track { Role = i, Initial = _testTrack.Initial, Equipment = _testTrack.Equipment, Ammo = _testTrack.Ammo,
                     Health = _testTrack.Health, Armor = _testTrack.Armor, OffsetMs = i == 5 ? 250 : 0,
                     Ticks = motion.ticks, Subticks = motion.subs, Commands = motion.commands };
             _testTacticId = _tactic.Id;
@@ -99,7 +108,7 @@ public sealed partial class KeranStratPlugin
         _testGroupIndex++;
         if (_testGroupIndex < _testGroups.Length) { BeginReplay(_testGroups[_testGroupIndex]); return true; }
         var report = new { Result = _testAllPassed ? "PASS_SERVER_AUTOMATION" : "FAIL_SYNC", Abi = _api!.AbiVersion,
-            Frames = _testTrack!.Ticks.Length, RecordedDisplacement = _testDisplacement,
+            Frames = _testTrack!.Ticks.Length, RecordedDisplacement = _testDisplacement, AwpAndTwoFlashbangs = _testLoadoutPassed,
             Cases = _testCaseReports,
             HumanClientTested = false, GrenadesTested = false, TimeUtc = DateTimeOffset.UtcNow };
         File.WriteAllText(Path.Combine(_dataRoot, "selftest-report.json"), System.Text.Json.JsonSerializer.Serialize(report));
