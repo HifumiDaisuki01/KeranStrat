@@ -13,6 +13,12 @@ public sealed class FileTacticStore(string root, int maxTactics = 100, long maxF
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly object _gate = new();
+    public void EnsureNameAvailable(string map, string name)
+    {
+        Tactic.ValidateName(name);
+        if (List(map).Any(t => t.Name.Equals(name, StringComparison.OrdinalIgnoreCase)))
+            throw new IOException("已存在该战术，无法同名新建。请使用 !ks load " + name + " 加载后编辑，或换一个名称。");
+    }
     private string MapDirectory(string map)
     {
         if (string.IsNullOrWhiteSpace(map) || map.Length > 256) throw new ArgumentException("地图名无效。");

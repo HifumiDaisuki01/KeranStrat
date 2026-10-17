@@ -228,6 +228,20 @@ Test("trim rejects empty results and invalid input without changing original", (
     Check(track.Ticks.Length == 64);
     track.Ticks[0].NumSubtick = 100; Reject(() => TrackEditing.TrimEnd(track, 1, 1d / 64));
 });
+Test("creation preflight rejects shared case-insensitive names without changing archives", () =>
+{
+    string root = Path.Combine(temp, "name-preflight"); var store = new FileTacticStore(root);
+    var existing = Fixture("002"); store.Save(existing);
+    var path = Directory.GetFiles(root, "*.ks", SearchOption.AllDirectories).Single(); var bytes = File.ReadAllBytes(path);
+    Reject(() => store.EnsureNameAvailable(existing.Map, "002"));
+    var letters = Fixture("B_Execute"); store.Save(letters);
+    Reject(() => store.EnsureNameAvailable(letters.Map, "b_execute"));
+    store.EnsureNameAvailable("de_dust2", "002"); store.EnsureNameAvailable(existing.Map, "003");
+    Reject(() => store.EnsureNameAvailable(existing.Map, "../002"));
+    Check(bytes.SequenceEqual(File.ReadAllBytes(path)) && store.Load(existing.Map, "002").Id == existing.Id);
+    var collaborator = store.Load(existing.Map, "002"); collaborator.Tracks.Remove(5); store.Save(collaborator);
+    Check(store.Load(existing.Map, "002").Tracks.Count == 4);
+});
 DefenseTests.Run(Test, Check, Reject, () => Fixture(), temp);
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);

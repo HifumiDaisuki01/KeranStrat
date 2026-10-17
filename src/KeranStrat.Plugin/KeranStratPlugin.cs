@@ -37,7 +37,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.3.0";
+    public override string ModuleVersion => "0.3.1";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -274,12 +274,18 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                     GivePracticeKit(player, cmd.ArgCount > 2 ? cmd.GetArg(2) : null); Reply("已补齐装备和训练资金；保留已有主武器。可 !ks kit awp，或按 B 自由购买（不限地点/时间）。"); break;
                 case "new":
                     string name = Args(cmd, 2); Tactic.ValidateName(name);
+                    if (_tactic?.Map == Server.MapName && _tactic.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("已存在该战术，当前正在编辑；请继续编辑或换一个名称。");
                     if (player.TeamNum is not (2 or 3) || !player.PawnIsAlive) throw new InvalidOperationException("请先选择 T/CT 并出生。");
                     _owner = player.SteamID; _ownerSlot = player.Slot;
-                    _tactic = new Tactic { Name = name, Map = Server.MapName, Creator = player.SteamID.ToString(), Team = player.TeamNum,
+                    var candidate = new Tactic { Name = name, Map = Server.MapName, Creator = player.SteamID.ToString(), Team = player.TeamNum,
                         TickInterval = Server.TickInterval, GameVersion = _gameVersion };
-                    _lastRecordedRole = 0; _hudUntil = 0;
-                    _anchor = Inventory.Capture(player, 1); Reply("已创建 " + name + "；起点及装备已记住。"); break;
+                    var candidateAnchor = Inventory.Capture(player, 1);
+                    Background(() => { _store.EnsureNameAvailable(candidate.Map, name); return candidate; }, created =>
+                    {
+                        _tactic = created; _anchor = candidateAnchor; _lastRecordedRole = 0; _hudUntil = 0;
+                        Notify("已创建 " + name + "；起点及装备已记住。");
+                    }); Reply("正在检查战术名称。"); break;
                 case "anchor":
                     RequireReady(player); _anchor = Inventory.Capture(player, 1); Reply("已更新后续新队员的初始位置和装备。"); break;
                 case "record":
@@ -309,8 +315,12 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 case "copy":
                     if (_tactic == null) throw new InvalidOperationException("尚无战术。");
                     string copyName = Args(cmd, 2); Tactic.ValidateName(copyName);
-                    _tactic.Id = Guid.NewGuid(); _tactic.Name = copyName; _tactic.Creator = player.SteamID.ToString(); _tactic.Created = DateTimeOffset.UtcNow;
-                    Reply("已复制为新 ID；请 !ks save。"); break;
+                    if (_tactic.Name.Equals(copyName, StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("已存在该战术，副本请使用不同名称。");
+                    var copy = _tactic.Snapshot(); copy.Id = Guid.NewGuid(); copy.Name = copyName; copy.Creator = player.SteamID.ToString(); copy.Created = DateTimeOffset.UtcNow;
+                    _owner = player.SteamID; _ownerSlot = player.Slot;
+                    Background(() => { _store.EnsureNameAvailable(copy.Map, copyName); return copy; }, created =>
+                    { _tactic = created; Notify("已复制为新 ID；请 !ks save。"); }); Reply("正在检查副本名称。"); break;
                 case "save":
                     if (_tactic == null) throw new InvalidOperationException("没有可保存的战术。");
                     var saved = _tactic.Snapshot(); Background(() => { _store.Save(saved); return saved; }, _ => Notify("战术已原子保存。")); Reply("正在保存。"); break;
