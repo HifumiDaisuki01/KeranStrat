@@ -243,6 +243,49 @@ Test("creation preflight rejects shared case-insensitive names without changing 
     Check(store.Load(existing.Map, "002").Tracks.Count == 4);
 });
 DefenseTests.Run(Test, Check, Reject, () => Fixture(), temp);
+Test("KS team respawn is delayed, single-use and follows T CT T changes", () =>
+{
+    var queue = new PracticeTeamRespawn(); var player = new PracticeIdentity(76561197960435530, 2, 10, 99);
+    foreach (int team in new[] { 2, 3, 2 })
+    {
+        queue.Queue(player, team, 100, 16, 320);
+        Check(!queue.Take(player, team, false, 115));
+        Check(queue.Take(player, team, false, 116));
+        Check(!queue.Take(player, team, false, 117));
+    }
+});
+Test("KS respawn rejects slot reuse, stale team, alive pawn and expired request", () =>
+{
+    var queue = new PracticeTeamRespawn(); var player = new PracticeIdentity(76561197960435530, 2, 10, 99);
+    foreach (var other in new[] { player with { SteamId = player.SteamId + 1 }, player with { UserId = 11 }, player with { Handle = 100 } })
+    { queue.Queue(player, 3, 100, 16, 320); Check(!queue.Take(other, 3, false, 116)); }
+    queue.Queue(player, 3, 100, 16, 320); Check(!queue.Take(player, 2, false, 116));
+    queue.Queue(player, 3, 100, 16, 320); Check(!queue.Take(player, 3, true, 116));
+    queue.Queue(player, 3, 100, 16, 320); Check(!queue.Take(player, 3, false, 421));
+});
+Test("KS pending respawn is replaced on rapid changes and cancelled on mode exit", () =>
+{
+    var queue = new PracticeTeamRespawn(); var player = new PracticeIdentity(76561197960435530, 2, 10, 99);
+    queue.Queue(player, 3, 100, 16, 320); queue.Queue(player, 2, 101, 16, 320);
+    Check(queue.Take(player, 2, false, 117));
+    queue.Queue(player, 3, 100, 16, 320); queue.Queue(player, 1, 101, 16, 320);
+    Check(queue.Slots.Length == 0);
+    queue.Queue(player, 3, 100, 16, 320); queue.Clear(); Check(!queue.Take(player, 3, false, 116));
+});
+Test("KS respawn gate excludes Defense including idle lease and map transitions", () =>
+{
+    Check(PracticeTeamRespawn.Allows(true, true, false, false, false, false));
+    Check(!PracticeTeamRespawn.Allows(true, true, false, true, false, false));
+    Check(!PracticeTeamRespawn.Allows(true, true, false, false, true, false));
+    Check(!PracticeTeamRespawn.Allows(true, true, false, false, false, true));
+    Check(!PracticeTeamRespawn.Allows(true, true, true, false, false, false));
+    Check(!PracticeTeamRespawn.Allows(false, true, false, false, false, false));
+    Check(!PracticeTeamRespawn.Allows(true, false, false, false, false, false));
+    var queue = new PracticeTeamRespawn(); var player = new PracticeIdentity(76561197960435530, 2, 10, 99);
+    queue.Queue(player, 3, 100, 16, 320);
+    Check(!queue.Take(player, 2, true, 101)); // Engine may still expose old team/alive state in event frame.
+    Check(queue.Take(player, 3, false, 116));
+});
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
 

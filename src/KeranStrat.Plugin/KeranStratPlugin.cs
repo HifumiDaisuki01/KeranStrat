@@ -37,7 +37,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.4.0";
+    public override string ModuleVersion => "0.4.1";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -132,23 +132,29 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 p.PrintToChat("[KeranStrat] AGPL 源码: " + Config.SourceUrl);
             return HookResult.Continue;
         });
+        RegisterEventHandler<EventPlayerTeam>((e, _) => { PracticeTeamChanged(e.Userid, e.Team, e.Oldteam); return HookResult.Continue; }, HookMode.Post);
         RegisterEventHandler<EventPlayerSpawn>((e, _) =>
         {
             var p = e.Userid;
             DefenseHandleSpawn(p);
+            if (p != null) _practiceTeamRespawn.Cancel(p.Slot);
             if (p is { IsValid: true, IsBot: false } && _trainingMode == "Practice" && !_modeChanging && _state == "idle" && !DefenseBusy)
+            {
+                var spawnIdentity = p.EntityHandle.Raw;
+                var spawnUserId = p.UserId;
                 Server.NextFrame(() =>
                 {
                     try
                     {
-                        if (p.IsValid && p.PawnIsAlive && _trainingMode == "Practice" && _state == "idle" && !DefenseBusy)
+                        if (p.IsValid && p.EntityHandle.Raw == spawnIdentity && p.UserId == spawnUserId && p.PawnIsAlive && _trainingMode == "Practice" && _state == "idle" && !DefenseBusy)
                         {
-                            if (AccessPolicy.Allows(Config.Enabled, _allowed, p.AuthorizedSteamID?.SteamId64.ToString())) GivePracticeKit(p);
+                            if (KsPracticeRespawnEnabled && KsPracticeHuman(p)) GivePracticeKit(p);
                             else if (AccessPolicy.Allows(Config.DefenseEnabled, _defenseAllowed, p.AuthorizedSteamID?.SteamId64.ToString())) DefensePracticeFunds(p);
                         }
                     }
                     catch (Exception error) { Log("训练装备恢复失败: " + error.Message); }
                 });
+            }
             return HookResult.Continue;
         });
         Server.NextFrame(() =>
@@ -447,6 +453,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         {
             RecordingHudTick();
             if (TrainingTick()) return;
+            PracticeRespawnTick();
             if (DefenseProbeTick()) return;
             DefenseTick();
             DefenseSelfTestTick();

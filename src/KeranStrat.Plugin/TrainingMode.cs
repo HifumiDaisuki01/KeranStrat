@@ -92,6 +92,7 @@ public sealed partial class KeranStratPlugin
     private void SwitchMode(string map, bool practice)
     {
         if (_modeChanging) throw new InvalidOperationException("模式切换中。");
+        _practiceTeamRespawn.Clear();
         _targetMap = map; _targetPractice = practice; _targetMapStarted = false;
         _trainingSetupIssued = false;
         _modeRequestTime = Stopwatch.GetTimestamp(); _modeChanging = true;
@@ -102,6 +103,7 @@ public sealed partial class KeranStratPlugin
     }
     private void TrainingMapStarted(string map)
     {
+        _practiceTeamRespawn.Clear();
         _defenseRetiring.Clear();
         _tactic = null; _anchor = null;
         _defenseTactic = null; _defenseSettings = null;
