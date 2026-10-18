@@ -11,7 +11,11 @@ namespace KeranStrat.Plugin;
 
 public sealed partial class KeranStratPlugin
 {
-    private sealed record XRayProxy(string Key, uint PawnSerial, CDynamicProp Relay, CDynamicProp Glow);
+    private sealed record XRayProxy(string Key, uint PawnSerial, CDynamicProp Relay, CDynamicProp Glow, int ReadyTick)
+    {
+        public bool Retiring { get; set; }
+        public bool Initialized { get; set; }
+    }
     private readonly Dictionary<string, XRayProxy> _xray = [];
     private readonly Dictionary<string, bool> _ksXrayPreferences = [], _versusXrayPreferences = [];
     private readonly object _configurationWriteGate = new();
@@ -35,14 +39,17 @@ public sealed partial class KeranStratPlugin
             try { allowed = !_xrayFailed && XRayViewer(viewer, _xrayVersus); } catch { /* Unauthenticated or invalid viewer: deny. */ }
             foreach (var proxy in _xray.Values)
             {
+                var pawn = new CHandle<CCSPlayerPawn>(proxy.PawnSerial).Value;
+                bool visible = allowed && proxy.Initialized && !proxy.Retiring && Server.TickCount >= proxy.ReadyTick &&
+                    pawn is { IsValid: true, LifeState: 0 };
                 foreach (var entity in new[] { proxy.Relay, proxy.Glow })
                 {
                     if (!entity.IsValid) continue;
-                    if (allowed) info.TransmitEntities.Add(entity);
+                    if (visible) info.TransmitEntities.Add(entity);
                     else { info.TransmitEntities.Remove(entity); if (!info.TransmitAlways.Equals(default(CFixedBitVecBase))) info.TransmitAlways.Remove(entity); }
                 }
-                // Bone followers require the observed pawn even outside the observer camera PVS.
-                if (allowed && new CHandle<CCSPlayerPawn>(proxy.PawnSerial).Value is { IsValid: true } pawn) info.TransmitEntities.Add(pawn);
+                // The engine owns pawn transmission, including death and ragdoll transitions.
+                // Forcing a pawn back into the snapshot can reference a removed ServerClass.
             }
         }
     }
@@ -50,6 +57,8 @@ public sealed partial class KeranStratPlugin
     {
         try
         {
+            // The console diagnostic owns its temporary pairs and checks them after staging.
+            if (_versusTestPhase != 0) return;
             bool versus = _versusState == "playing";
             if (_xrayFailed || XRayDefenseBlocked || _modeChanging || _trainingMode != "Practice" || (!versus && (_state != "playing" || VersusLease)) ||
                 !Utilities.GetPlayers().Any(p => XRayViewer(p, versus))) { XRayClear(); return; }
@@ -68,6 +77,7 @@ public sealed partial class KeranStratPlugin
             foreach (var (key, pawn) in targets)
             {
                 if (!_xray.TryGetValue(key, out var proxy)) { proxy = XRayCreate(key, pawn); _xray[key] = proxy; }
+                if (proxy.Retiring || !proxy.Initialized) continue;
                 string color = (versus ? Config.VersusXRayColors : Config.KsXRayColors)[key];
                 var desired = ColorTranslator.FromHtml(color);
                 if (proxy.Glow.Glow.GlowColorOverride != desired)
@@ -79,24 +89,50 @@ public sealed partial class KeranStratPlugin
     private XRayProxy XRayCreate(string key, CCSPlayerPawn pawn)
     {
         CDynamicProp? relay = null, glow = null;
+        bool relaySpawned = false, glowSpawned = false;
         try
         {
             string model = pawn.CBodyComponent?.SceneNode?.GetSkeletonInstance().ModelState.ModelName ?? throw new InvalidOperationException("缺少模型。");
             relay = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic") ?? throw new InvalidOperationException("无法创建轮廓跟随实体。");
             glow = Utilities.CreateEntityByName<CDynamicProp>("prop_dynamic") ?? throw new InvalidOperationException("无法创建轮廓实体。");
-            relay.SetModel(model); relay.Spawnflags = 256; relay.RenderMode = RenderMode_t.kRenderNone; relay.DispatchSpawn();
-            glow.SetModel(model); glow.Spawnflags = 256; glow.DispatchSpawn();
-            glow.Glow.GlowColorOverride = ColorTranslator.FromHtml((_xrayVersus ? Config.VersusXRayColors : Config.KsXRayColors)[key]);
-            glow.Glow.GlowRange = 10000; glow.Glow.GlowRangeMin = 0; glow.Glow.GlowTeam = -1; glow.Glow.GlowType = 3;
-            relay.AcceptInput("FollowEntity", pawn, relay, "!activator"); glow.AcceptInput("FollowEntity", relay, glow, "!activator");
-            Utilities.SetStateChanged(glow, "CBaseModelEntity", "m_Glow");
-            return new(key, pawn.EntityHandle.Raw, relay, glow);
+            relay.SetModel(model); relay.Spawnflags = 256; relay.DispatchSpawn(); relaySpawned = true;
+            glow.SetModel(model); glow.Spawnflags = 256; glow.DispatchSpawn(); glowSpawned = true;
+            var proxy = new XRayProxy(key, pawn.EntityHandle.Raw, relay, glow, Server.TickCount + 2);
+            Server.NextFrame(() =>
+            {
+                if (!_xray.TryGetValue(key, out var current) || !ReferenceEquals(current, proxy) || proxy.Retiring) return;
+                try
+                {
+                    if (!relay.IsValid || !glow.IsValid || !pawn.IsValid || pawn.EntityHandle.Raw != proxy.PawnSerial || pawn.LifeState != 0)
+                    { XRayRemove(key); return; }
+                    // Replicated properties and FollowEntity are unsafe on staging entities.
+                    relay.RenderMode = RenderMode_t.kRenderNone;
+                    glow.Glow.GlowColorOverride = ColorTranslator.FromHtml((_xrayVersus ? Config.VersusXRayColors : Config.KsXRayColors)[key]);
+                    glow.Glow.GlowRange = 10000; glow.Glow.GlowRangeMin = 0; glow.Glow.GlowTeam = -1; glow.Glow.GlowType = 3;
+                    relay.AcceptInput("FollowEntity", pawn, relay, "!activator"); glow.AcceptInput("FollowEntity", relay, glow, "!activator");
+                    Utilities.SetStateChanged(glow, "CBaseModelEntity", "m_Glow");
+                    proxy.Initialized = true;
+                }
+                catch (Exception e) { _xrayFailed = true; XRayClear(); Log("X 光初始化已安全停止：" + e.Message); }
+            });
+            return proxy;
         }
-        catch { if (glow is { IsValid: true }) glow.Remove(); if (relay is { IsValid: true }) relay.Remove(); throw; }
+        catch
+        {
+            // A partially created prop must leave staging before requesting removal.
+            foreach (var (entity, spawned) in new[] { (glow, glowSpawned), (relay, relaySpawned) })
+                if (entity is { IsValid: true })
+                    try { if (!spawned) entity.DispatchSpawn(); entity.Remove(); }
+                    catch (Exception e) { Log("未完成轮廓实体清理失败：" + e.Message); }
+            throw;
+        }
     }
     private void XRayRemove(string key)
     {
         if (!_xray.TryGetValue(key, out var proxy)) return;
+        // Remove() queues engine deletion: IsValid may remain true until the next frame.
+        // Deny transmission BEFORE requesting deletion, never re-add a retiring entity.
+        proxy.Retiring = true;
         foreach (var entity in new[] { proxy.Glow, proxy.Relay })
             try { if (entity.IsValid) entity.Remove(); }
             catch (Exception e) { if (!_xrayFailed) Log("轮廓清理待重试：" + e.Message); _xrayFailed = true; }

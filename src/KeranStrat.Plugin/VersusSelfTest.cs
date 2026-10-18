@@ -20,6 +20,7 @@ public sealed partial class KeranStratPlugin
     private readonly List<object> _versusTestCases = [];
     private string _versusTestDirectory = "";
     private bool _versusTestGlowChecked;
+    private int _versusTestGlowReadyAt;
     private void RegisterVersusTestEvents()
     {
         RegisterEventHandler<EventPlayerHurt>((e, _) =>
@@ -111,7 +112,7 @@ public sealed partial class KeranStratPlugin
             scene.Tracks[VersusScene.Key(team, i)] = copy;
         }
         var store = new VersusStore(_versusTestDirectory); store.Save(scene); _versusScene = store.Load(scene.Map, scene.Id.ToString());
-        StartVersus(null); _versusTestSettle = 0; _versusTestGlowChecked = false;
+        StartVersus(null); _versusTestSettle = 0; _versusTestGlowChecked = false; _versusTestGlowReadyAt = 0;
         Log($"KSV diagnostic case={_versusTestCase} {countT}T vs {countCT}CT {scene.Mode}");
     }
     private void VersusTestTick()
@@ -146,11 +147,18 @@ public sealed partial class KeranStratPlugin
             if (_versusState == "preparing" && _versusBots.Count == _versusScene!.Tracks.Count && !_versusTestGlowChecked)
             {
                 _xrayVersus = true;
+                if (_versusTestGlowReadyAt == 0)
+                {
+                    foreach (var b in _versusBots.Values)
+                        _xray[b.Key] = XRayCreate(b.Key, VersusResolve(b)!.PlayerPawn.Value!);
+                    _versusTestGlowReadyAt = Server.TickCount + 2;
+                    return;
+                }
+                if (Server.TickCount < _versusTestGlowReadyAt) return;
                 foreach (var b in _versusBots.Values)
                 {
-                    var pawn = VersusResolve(b)!.PlayerPawn.Value!;
-                    var proxy = XRayCreate(b.Key, pawn); _xray[b.Key] = proxy;
-                    if (proxy.Glow.Glow.GlowType != 3 || proxy.Glow.Glow.GlowColorOverride.ToArgb() != System.Drawing.ColorTranslator.FromHtml(Config.VersusXRayColors[b.Key]).ToArgb())
+                    var proxy = _xray[b.Key];
+                    if (!proxy.Initialized || proxy.Retiring || proxy.Glow.Glow.GlowType != 3 || proxy.Glow.Glow.GlowColorOverride.ToArgb() != System.Drawing.ColorTranslator.FromHtml(Config.VersusXRayColors[b.Key]).ToArgb())
                         throw new InvalidOperationException("原生轮廓实体属性或角色颜色不匹配。");
                     _versusTestGlows++;
                 }

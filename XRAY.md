@@ -43,7 +43,7 @@ KS 按 1～5 号配色，不区分 T/CT。KSV 按 T1～T5、CT1～CT5 配色，�
 
 ## 实现与验证边界
 
-使用两层 prop_dynamic 模型跟随与 Glow 属性，逐客户端 CheckTransmit 过滤；仅给合格观察者补传对应 BOT Pawn 以更新骨骼，不修改原 Pawn 的 Glow、材质、生命值或战斗 AI。结束、死亡、地图切换、卸载和 Defense 进入均清理。移除失败的实体继续保留在拒绝传输集合中并重试。
+使用两层 prop_dynamic 模型跟随与 Glow 属性，逐客户端 CheckTransmit 过滤。v0.5.4 起，显示属性和跟随关系延迟至生成后的下一帧初始化，至少等待两个 Tick 才发送轮廓；删除请求前立即禁止发送。BOT Pawn 的网络发送由引擎管理，不再强行补传死亡或正在转换的 Pawn，不修改其 Glow、材质、生命值或战斗 AI。结束、死亡、地图切换、卸载和 Defense 进入均清理。移除失败的实体继续保留在拒绝传输集合中并重试；观战摄像机远处的骨骼更新效果仍需客户端确认。
 
 机制参考 CounterStrikeSharp 官方 CGlowProperty／CheckTransmit 接口及社区 issue #765 的模型跟随讨论：
 - https://docs.cssharp.dev/api/CounterStrikeSharp.API.Core.CGlowProperty.html

@@ -37,7 +37,7 @@ Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权�
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.5.1-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.5.4-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。
