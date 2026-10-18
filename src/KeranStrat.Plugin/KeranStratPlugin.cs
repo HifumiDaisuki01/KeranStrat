@@ -48,7 +48,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.5.1";
+    public override string ModuleVersion => "0.5.2";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -228,15 +228,18 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
         if ((_state != "idle" || _busy) && _ownerSlot >= 0 && player != null && (_ownerSlot != player.Slot || _owner != player.SteamID))
             throw new InvalidOperationException("已有其他玩家在操作 KeranStrat。");
     }
-    private void RequireReady(CCSPlayerController player)
+    private void RequireReady(CCSPlayerController player, bool allowSpectator = false)
     {
         RequireOwner(player);
         if (_busy || _state != "idle") throw new InvalidOperationException("已有操作进行中，请先 !ks stop 或 !ks cancel。");
         if (!_practice.Active || _trainingMode != "Practice" || _modeChanging) throw new InvalidOperationException("请先 !ks practice，等待训练地图加载完成；!ks exit 恢复死斗。");
         if (!Bind()) throw new InvalidOperationException("BotController 原生/API 依赖未就绪。");
         if (_tactic == null || _tactic.Map != Server.MapName) throw new InvalidOperationException("请先创建或加载当前地图战术。");
-        if (_tactic.Team != player.TeamNum) throw new InvalidOperationException("玩家队伍与战术 T/CT 不一致。");
-        if (!player.PawnIsAlive) throw new InvalidOperationException("请先出生。");
+        if (!(allowSpectator && player.TeamNum == 1))
+        {
+            if (_tactic.Team != player.TeamNum) throw new InvalidOperationException("玩家队伍与战术 T/CT 不一致；播放可切换为观察者，录制需加入战术对应阵营。");
+            if (!player.PawnIsAlive) throw new InvalidOperationException("请先出生。");
+        }
         _owner = player.SteamID; _ownerSlot = player.Slot;
     }
     private void Command(CCSPlayerController? player, CommandInfo cmd) => Command(player, cmd, null);
@@ -339,8 +342,8 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 case "stop":
                     if (_state == "recording") FinishRecording(); else Abort("已停止", false);
                     break;
-                case "play": RequireReady(player); BeginReplay(_tactic!.Tracks.Keys.Order().ToArray()); break;
-                case "replay": RequireReady(player); BeginReplay([Role(cmd.GetArg(2))]); break;
+                case "play": RequireReady(player, allowSpectator: true); BeginReplay(_tactic!.Tracks.Keys.Order().ToArray()); break;
+                case "replay": RequireReady(player, allowSpectator: true); BeginReplay([Role(cmd.GetArg(2))]); break;
                 case "offset":
                     if (_tactic == null || !_tactic.Tracks.TryGetValue(Role(cmd.GetArg(2)), out var track)) throw new InvalidOperationException("该队员还没有轨迹。");
                     if (!int.TryParse(cmd.GetArg(3), out int offset) || offset is < 0 or > 120000) throw new ArgumentException("偏移必须为 0–120000 毫秒。");
