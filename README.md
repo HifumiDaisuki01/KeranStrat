@@ -12,7 +12,7 @@
 - **独立编辑**：重录、移除或补录单个队员，保留其他轨迹；支持设置起点、复制战术和重复播放。
 - **战术库**：按地图保存、加载、列出、复制和删除战术，使用原子文件写入及容量限制。
 - **一键训练**：进入训练环境、补齐武器和投掷物、切换地图；退出时自动保存、清理 BOT，并恢复 Dust2 死斗。
-- **SteamID64 白名单**：所有游戏指令统一鉴权，支持配置热重载，不依赖 CSSharp 管理员权限。
+- **SteamID64 白名单**：训练与编辑指令统一鉴权，支持配置热重载，不依赖 CSSharp 管理员权限。
 - **轻量部署**：插件本地存储，无数据库、Web 服务或客户端插件依赖。
 
 ## KeranStrat Defense
@@ -37,7 +37,7 @@ Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权�
 
 运行环境：Linux x86_64、CS2 Dedicated Server、Metamod:Source、CounterStrikeSharp（.NET 10）。配套原生引擎为 CS2-Bot-Controller 0.7.2 / ABI 22。
 
-1. 在 Releases 下载 `KeranStrat-v0.5.4-linux-x64.zip`。
+1. 在 Releases 下载 `KeranStrat-v0.5.5-linux-x64.zip`。
 2. 在维护窗口停止服务器，备份将要替换的文件，将压缩包中的 `addons/` 合并到 `game/csgo/addons/`。
 3. 编辑 `addons/counterstrikesharp/configs/plugins/KeranStrat/KeranStrat.json`，在 `AllowedSteamIDs` 中填写自己的 SteamID64 字符串。
 4. 启动服务器，进服后输入 `!ks` 查看帮助。
@@ -45,6 +45,10 @@ Defense 使用独立的 `DefenseAllowedSteamIDs` 白名单，不继承原版权�
 默认白名单为空。升级时保留已有配置和插件 `data/` 目录，不要用默认模板覆盖自己的白名单。
 
 详见 [安装与构建](INSTALL.md)、[配置说明](CONFIGURATION.md)。
+
+## 使用手册
+
+访问 [cs.jinhsi.cn/help](https://cs.jinhsi.cn/help)：简洁快速上手、KS / KSV / KSD 完整指令、参数和示例。游戏内输入 `!ks`、`!ksv`、`!ksd` 或各自的 `help` 获取网址，不自动打开浏览器。网页源码在 `web/help/`，由 `scripts/build-help.py` 生成。
 
 ## 快速使用
 
@@ -90,7 +94,7 @@ bind "mouse3" "css_ks_stop"
 
 ## 指令
 
-所有游戏内指令均需 SteamID64 白名单授权。
+帮助指令无需权限；训练及编辑操作需对应模式的 SteamID64 白名单授权。
 
 | 指令 | 功能 |
 |---|---|

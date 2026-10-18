@@ -1,0 +1,422 @@
+{
+  "ks": [
+    {
+      "command": "!ks help",
+      "description": "查看模式简介与完整帮助网址",
+      "example": "!ks help",
+      "note": "直接输入 !ks 效果相同；查看帮助无需训练权限。"
+    },
+    {
+      "command": "!ks practice",
+      "description": "进入训练环境",
+      "example": "!ks practice",
+      "note": "会重新加载地图；等待就绪后选择 T/CT 并出生。"
+    },
+    {
+      "command": "!ks exit",
+      "description": "保存当前战术、退出训练并恢复 Dust2 死斗",
+      "example": "!ks exit",
+      "note": "practice off 是等效退出操作；切换影响全服。"
+    },
+    {
+      "command": "!ks map <地图>",
+      "description": "保存当前战术后切换训练地图",
+      "example": "!ks map de_mirage",
+      "note": "地图必须已安装且是允许的 de_ 地图。"
+    },
+    {
+      "command": "!ks kit [主武器]",
+      "description": "补齐护甲、投掷物和训练资金",
+      "example": "!ks kit awp",
+      "note": "不传主武器时保留已有主武器；支持双闪，也可按 B 自由购买。"
+    },
+    {
+      "command": "!ks new <名称>",
+      "description": "在当前地图新建战术，记录阵营和起点",
+      "example": "!ks new B区进攻",
+      "note": "需 T/CT 存活；同地图重名会拒绝创建，已有战术请 load。"
+    },
+    {
+      "command": "!ks anchor",
+      "description": "将当前位置和视角设为新队员起点",
+      "example": "!ks anchor",
+      "note": "重录已有队员仍使用该队员自己的旧起点；录制保留开始时已购买的装备。"
+    },
+    {
+      "command": "!ks record <1-5>",
+      "description": "录制或重录指定队员",
+      "example": "!ks record 1",
+      "note": "倒计时结束后行动；重录只覆盖该队员，其他轨迹保留；需与战术阵营一致并存活。"
+    },
+    {
+      "command": "!ks stop",
+      "description": "结束录制或停止回放",
+      "example": "!ks stop",
+      "note": "结束录制会保留轨迹；不会退出训练，之后 save 才落盘。控制台 css_ks_stop 可绑定快捷键。"
+    },
+    {
+      "command": "!ks trim <毫秒> [队员]",
+      "description": "裁掉轨迹末尾的多余动作",
+      "example": "!ks trim 300 2",
+      "note": "省略队员时处理最近录制的队员；按 Tick 向上取整，至少保留一帧；修改后 save。"
+    },
+    {
+      "command": "!ks play",
+      "description": "同步回放所有已录制队员",
+      "example": "!ks play",
+      "note": "仅生成有轨迹的 BOT，支持非连续编号；普通 KS 是纯轨迹回放，没有战斗 AI 交接。"
+    },
+    {
+      "command": "!ks replay <1-5>",
+      "description": "只回放一个队员",
+      "example": "!ks replay 3",
+      "note": "支持以观察者身份播放；缺少该轨迹时拒绝。"
+    },
+    {
+      "command": "!ks offset <1-5> <毫秒>",
+      "description": "设置该队员相对统一开始时间的延迟",
+      "example": "!ks offset 3 1500",
+      "note": "范围 0–120000 毫秒；1500 表示晚 1.5 秒开始，之后 save。"
+    },
+    {
+      "command": "!ks remove <1-5>",
+      "description": "移除一个队员的轨迹",
+      "example": "!ks remove 3",
+      "note": "保留其他轨迹；之后 save。"
+    },
+    {
+      "command": "!ks save",
+      "description": "将当前战术保存到服务器",
+      "example": "!ks save",
+      "note": "录制、裁剪、偏移和删除队员后均应主动保存。"
+    },
+    {
+      "command": "!ks load <名称或ID>",
+      "description": "加载当前地图共享战术",
+      "example": "!ks load B区进攻",
+      "note": "支持观察者加载；多人可轮流编辑同一套战术，不是个人隔离库；版本或 Tick 不兼容会拒绝。"
+    },
+    {
+      "command": "!ks list",
+      "description": "列出当前地图的战术名称和 ID",
+      "example": "!ks list",
+      "note": "这里只列出 KS 战术，不包含 KSV 独立场景。"
+    },
+    {
+      "command": "!ks copy <新名称>",
+      "description": "将当前战术复制为新 ID 的草稿",
+      "example": "!ks copy B区进攻_改版",
+      "note": "新名称不可重名；复制后 save 才保存。"
+    },
+    {
+      "command": "!ks delete <名称或ID>",
+      "description": "删除当前地图指定战术文件",
+      "example": "!ks delete B区进攻_旧版",
+      "note": "直接删除共享文件，请确认目标；不会把当前内存草稿自动保存。"
+    },
+    {
+      "command": "!ks reset",
+      "description": "停止当前操作并恢复当前战术起点和装备",
+      "example": "!ks reset",
+      "note": "保留战术；不会恢复已删除文件，也不会退出训练。"
+    },
+    {
+      "command": "!ks cancel",
+      "description": "取消当前操作并清理本次 BOT",
+      "example": "!ks cancel",
+      "note": "游戏内保留战术和训练环境；录制中取消不等于 stop 完成录制。"
+    },
+    {
+      "command": "!ks status",
+      "description": "查看环境、状态、战术和最近错误",
+      "example": "!ks status",
+      "note": "遇到无法录制或回放时先查看状态，地图切换时请等待完成。"
+    },
+    {
+      "command": "!ks reload",
+      "description": "重新加载配置和权限",
+      "example": "!ks reload",
+      "note": "供有相应权限的操作人员使用，不会自动授予白名单权限。"
+    },
+    {
+      "command": "!ks source",
+      "description": "显示开源许可与源码地址",
+      "example": "!ks source",
+      "note": ""
+    },
+    {
+      "command": "!ks xray on|off",
+      "description": "开启或关闭自己的观战 X 光",
+      "example": "!ks xray on",
+      "note": "仅对应模式已授权观察者在回放中可见；T/CT 参战玩家不可见。KS 默认关闭，KSV 默认开启。"
+    },
+    {
+      "command": "!ks xray colors",
+      "description": "查看角色轮廓配色",
+      "example": "!ks xray colors",
+      "note": "开关偏好各观察者独立；角色配色是本模式全体观察者共享的设置。"
+    },
+    {
+      "command": "!ks xray color <1-5> <RRGGBB>",
+      "description": "修改角色轮廓颜色",
+      "example": "!ks xray color 1 0088FF",
+      "note": "使用六位十六进制 RGB，可带 #；修改即时生效并保存，不必停止回放。"
+    },
+    {
+      "command": "!ks xray resetcolors",
+      "description": "恢复本模式默认配色",
+      "example": "!ks xray resetcolors",
+      "note": "只重置对应模式的共享颜色；KSD 不支持 X 光。"
+    }
+  ],
+  "ksv": [
+    {
+      "command": "!ksv help",
+      "description": "查看 KSV 简介与帮助网址",
+      "example": "!ksv help",
+      "note": "直接输入 !ksv 效果相同。"
+    },
+    {
+      "command": "!ksv practice",
+      "description": "进入双阵营模拟训练环境",
+      "example": "!ksv practice",
+      "note": "需独立 KSV 权限；与 KS、KSD 不能同时占用录制器和 BOT。"
+    },
+    {
+      "command": "!ksv exit",
+      "description": "保存场景并恢复 Dust2 死斗",
+      "example": "!ksv exit",
+      "note": "保存失败时不会继续切换。"
+    },
+    {
+      "command": "!ksv map <地图>",
+      "description": "保存场景后切换训练地图",
+      "example": "!ksv map de_inferno",
+      "note": "仅支持已安装且允许的 de_ 地图。"
+    },
+    {
+      "command": "!ksv new <名称>",
+      "description": "新建独立双阵营场景",
+      "example": "!ksv new B区3v1",
+      "note": "同地图不可重名；成功创建或加载者持有会话，其他人不能抢占。"
+    },
+    {
+      "command": "!ksv load <名称或ID>",
+      "description": "加载当前地图 KSV 场景",
+      "example": "!ksv load B区3v1",
+      "note": "与 KS 的 .ks 战术库分开，不能直接加载 KS 文件。"
+    },
+    {
+      "command": "!ksv list",
+      "description": "列出当前地图 KSV 场景",
+      "example": "!ksv list",
+      "note": "包含场景 ID、名称和已录制角色数。"
+    },
+    {
+      "command": "!ksv anchor t|ct",
+      "description": "保存该阵营的新角色起点",
+      "example": "!ksv anchor t",
+      "note": "必须加入对应阵营且存活；分别设置 T 和 CT 起点。"
+    },
+    {
+      "command": "!ksv record t|ct <1-5>",
+      "description": "录制或重录指定阵营角色",
+      "example": "!ksv record ct 1",
+      "note": "需在对应阵营存活；保留当前购买的装备；重录后该角色 handoff 重置为 auto。"
+    },
+    {
+      "command": "!ksv stop",
+      "description": "完成当前录制，或停止当前模拟",
+      "example": "!ksv stop",
+      "note": "保留场景与训练环境；控制台快捷停止命令是 css_ksv_stop。"
+    },
+    {
+      "command": "!ksv save",
+      "description": "保存 KSV 场景及其参数",
+      "example": "!ksv save",
+      "note": "轨迹、偏移、模式和交接参数编辑后请保存。"
+    },
+    {
+      "command": "!ksv remove t|ct <1-5>",
+      "description": "移除一个角色及其交接设置",
+      "example": "!ksv remove t 3",
+      "note": "之后 save；不影响其他角色。"
+    },
+    {
+      "command": "!ksv offset t|ct <1-5> <毫秒>",
+      "description": "设置该角色开始回放的延迟",
+      "example": "!ksv offset ct 1 1500",
+      "note": "范围 0–120000 毫秒；延迟和 AI 交接时间分别计算。"
+    },
+    {
+      "command": "!ksv mode strict|hybrid",
+      "description": "选择严格回放或混合 AI 模式",
+      "example": "!ksv mode hybrid",
+      "note": "strict：只执行录制，结束后不主动寻敌；hybrid：按每角色交接设置恢复原生战斗 AI。"
+    },
+    {
+      "command": "!ksv handoff t|ct <1-5> <毫秒或auto>",
+      "description": "设置单个角色的 AI 交接时间",
+      "example": "!ksv handoff t 1 auto",
+      "note": "仅 hybrid 使用；auto 等待该角色回放自然结束；毫秒从该角色自己的轨迹开始计算，不能超过轨迹长度。"
+    },
+    {
+      "command": "!ksv play",
+      "description": "让双方 BOT 同步模拟交战",
+      "example": "!ksv play",
+      "note": "每队需有效轨迹；只生成已录角色，各队 1–5 个；操作者自动转观察者，其他真人须提前转观察者。"
+    },
+    {
+      "command": "!ksv repeat on|off",
+      "description": "开启或关闭连续模拟",
+      "example": "!ksv repeat on",
+      "note": "可在模拟中切换；每轮结束清理 BOT 后开始下一轮；save 持久保存场景参数。"
+    },
+    {
+      "command": "!ksv status",
+      "description": "查看角色、模式、交接、轮次和结果",
+      "example": "!ksv status",
+      "note": "结果包含胜负、平局、超时或异常取消。"
+    },
+    {
+      "command": "!ksv reload",
+      "description": "重新加载 KSV 权限与配置",
+      "example": "!ksv reload",
+      "note": "不继承 KS 或 KSD 白名单。"
+    },
+    {
+      "command": "!ksv xray on|off",
+      "description": "开启或关闭自己的观战 X 光",
+      "example": "!ksv xray on",
+      "note": "仅对应模式已授权观察者在回放中可见；T/CT 参战玩家不可见。KS 默认关闭，KSV 默认开启。"
+    },
+    {
+      "command": "!ksv xray colors",
+      "description": "查看角色轮廓配色",
+      "example": "!ksv xray colors",
+      "note": "开关偏好各观察者独立；角色配色是本模式全体观察者共享的设置。"
+    },
+    {
+      "command": "!ksv xray color t|ct <1-5> <RRGGBB>",
+      "description": "修改角色轮廓颜色",
+      "example": "!ksv xray color ct 1 0088FF",
+      "note": "使用六位十六进制 RGB，可带 #；修改即时生效并保存，不必停止回放。"
+    },
+    {
+      "command": "!ksv xray resetcolors",
+      "description": "恢复本模式默认配色",
+      "example": "!ksv xray resetcolors",
+      "note": "只重置对应模式的共享颜色；KSD 不支持 X 光。"
+    }
+  ],
+  "ksd": [
+    {
+      "command": "!ksd help",
+      "description": "查看防守模式简介与帮助网址",
+      "example": "!ksd help",
+      "note": "直接输入 !ksd 效果相同。"
+    },
+    {
+      "command": "!ksd practice",
+      "description": "进入防守训练环境",
+      "example": "!ksd practice",
+      "note": "需独立 Defense 权限；就绪后加入 CT，按 B 配装。"
+    },
+    {
+      "command": "!ksd exit",
+      "description": "结束会话并恢复 Dust2 死斗",
+      "example": "!ksd exit",
+      "note": "房主执行；切换影响全服。"
+    },
+    {
+      "command": "!ksd close",
+      "description": "解散防守会话，保留训练环境",
+      "example": "!ksd close",
+      "note": "房主执行；释放占用后才能开始 KS 或 KSV 操作。"
+    },
+    {
+      "command": "!ksd map <地图>",
+      "description": "结束会话并切换训练地图",
+      "example": "!ksd map de_mirage",
+      "note": "房主执行；目标须是已安装且允许的 de_ 地图。"
+    },
+    {
+      "command": "!ksd list",
+      "description": "列出当前地图已有的 T 方 KS 战术",
+      "example": "!ksd list",
+      "note": "KSD 不录制进攻轨迹；请先用 KS 在 T 方录制并保存。"
+    },
+    {
+      "command": "!ksd load <名称或ID>",
+      "description": "只读加载 T 方战术并建立防守会话",
+      "example": "!ksd load B区进攻",
+      "note": "房主需在 CT；成功后自动加入防守队伍；不会改写原 .ks 文件。"
+    },
+    {
+      "command": "!ksd join",
+      "description": "加入当前防守队伍",
+      "example": "!ksd join",
+      "note": "成员需 Defense 权限且在 CT；训练停止时加入；队伍最多 5 人。"
+    },
+    {
+      "command": "!ksd leave",
+      "description": "离开防守队伍",
+      "example": "!ksd leave",
+      "note": "普通成员使用；交火中延迟到本轮结束；房主应 stop 或 close，不能直接 leave。"
+    },
+    {
+      "command": "!ksd team",
+      "description": "查看房主、队员和准备状态",
+      "example": "!ksd team",
+      "note": "开始前确认每位队员已 join 且已 position。"
+    },
+    {
+      "command": "!ksd position",
+      "description": "保存自己的防守位置、视角和配装",
+      "example": "!ksd position",
+      "note": "先加入队伍，在 CT 存活并停在防守点；训练必须停止。每人单独保存。"
+    },
+    {
+      "command": "!ksd start",
+      "description": "开始防守训练",
+      "example": "!ksd start",
+      "note": "房主执行；捕获当前装备，统一复活与就位后倒计时；无关真人须转观察者。"
+    },
+    {
+      "command": "!ksd stop",
+      "description": "停止训练，保留队伍和训练环境",
+      "example": "!ksd stop",
+      "note": "房主执行；改位置、难度或交接前先 stop。"
+    },
+    {
+      "command": "!ksd repeat on|off",
+      "description": "设置是否自动开始下一轮",
+      "example": "!ksd repeat off",
+      "note": "房主可在训练中切换；配置自动保存。"
+    },
+    {
+      "command": "!ksd difficulty <1-4>",
+      "description": "设置原生 AI 战斗难度",
+      "example": "!ksd difficulty 3",
+      "note": "房主在停止状态设置；1 简单、2 普通、3 困难、4 专家。"
+    },
+    {
+      "command": "!ksd handoff <1-5> <毫秒或auto>",
+      "description": "设置某个 T BOT 从录制切换 AI 的时间",
+      "example": "!ksd handoff 1 auto",
+      "note": "房主在停止状态设置；从该 BOT 自身轨迹开始计时，不能超过轨迹长度；auto 为自然回放结束。"
+    },
+    {
+      "command": "!ksd status",
+      "description": "查看训练状态、交接和团队成绩",
+      "example": "!ksd status",
+      "note": "显示成功、失败、平局、超时和存活人数；一名 CT 死亡不终止其他队友防守。"
+    },
+    {
+      "command": "!ksd reload",
+      "description": "重新加载 Defense 配置与权限",
+      "example": "!ksd reload",
+      "note": "房主执行；权限被撤销可能移除成员或解散会话。"
+    }
+  ]
+}

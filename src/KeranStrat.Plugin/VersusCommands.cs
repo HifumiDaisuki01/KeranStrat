@@ -64,12 +64,13 @@ public sealed partial class KeranStratPlugin
     private void VersusCommand(CCSPlayerController? p, CommandInfo cmd, string? forced = null)
     {
         void Reply(string s) => cmd.ReplyToCommand("[KeranStrat Versus] " + s);
-        if (p != null && !VersusAuthorized(p)) { Reply("你没有权限使用 Versus 模式。"); return; }
         string action = forced ?? (cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help");
+        if (action == "help") { ReplyHelp(cmd, "ksv"); return; }
+        if (p != null && !VersusAuthorized(p)) { Reply("你没有权限使用 Versus 模式。"); return; }
+
         try
         {
-            if (action == "help")
-            { Reply("practice | exit | map <地图> | new <名称> | anchor t/ct | record t/ct 1-5 | stop | save | load <名称/ID> | list | remove t/ct 1-5 | offset t/ct 1-5 <毫秒> | mode strict/hybrid | handoff t/ct 1-5 <毫秒/auto> | play | repeat on/off | xray on/off/colors/color/resetcolors | status | reload"); return; }
+
             if (action == "status")
             {
                 Reply($"mode={_trainingMode}, changing={_modeChanging}, state={_versusState}, fileBusy={_versusIO}, scene={_versusScene?.Name ?? "none"}, replay={_versusScene?.Mode}, repeat={_versusScene?.Repeat}, rounds={_versusRounds}, result={_versusLastResult}, error={_versusError}");
@@ -177,7 +178,7 @@ public sealed partial class KeranStratPlugin
                     _versusScene.Mode = mode; Reply("已切换为 " + mode); break;
                 case "repeat": SetVersusRepeat(cmd.GetArg(2)); Reply("循环已更新。"); break;
                 case "play": StartVersus(p); break;
-                default: throw new ArgumentException("未知指令，!ksv 查看帮助。");
+                default: throw new ArgumentException("未知指令，输入 !ksv help 查看使用方法：https://cs.jinhsi.cn/help");
             }
         }
         catch (Exception e) { _versusError = e.Message; Reply(e.Message); Log("KSV 指令失败：" + e.Message); }

@@ -48,7 +48,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
 {
     public override string ModuleName => "KeranStrat";
     public override string ModuleAuthor => "Keran Technology";
-    public override string ModuleVersion => "0.5.4";
+    public override string ModuleVersion => "0.5.5";
     public override string ModuleDescription => "五队员原生动作录制、统一 Tick 回放与本地战术存储 (AGPL-3.0)";
     public KeranStratConfig Config { get; set; } = new();
     private IBotControllerApi? _api;
@@ -247,6 +247,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
     {
         string action = forcedAction ?? (cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help");
         void Reply(string message) => cmd.ReplyToCommand("[KeranStrat] " + message);
+        if (action == "help") { ReplyHelp(cmd, "ks"); return; }
         if (player != null)
         {
             string? id = null;
@@ -255,10 +256,9 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
             if (!AccessPolicy.Allows(Config.Enabled, _allowed, id))
             { Reply("你没有权限使用 KeranStrat。"); return; }
         }
-        if (action is "help" or "source")
+        if (action == "source")
         {
-            Reply(action == "source" ? $"AGPL-3.0；Keran Technology；BotController: XBribo。源码: {Config.SourceUrl}" :
-                "!ks practice | exit | map <地图> | kit | new <名称> | record <1-5> | stop | trim <毫秒> [队员] | play | replay <1-5> | remove <1-5> | reset | save | load <名称/ID> | list | delete <名称/ID> | copy <名称> | offset <1-5> <毫秒> | anchor | reload | status | cancel | source；快捷停止绑定：bind mouse3 css_ks_stop");
+            Reply($"AGPL-3.0；Keran Technology；BotController: XBribo。源码: {Config.SourceUrl}");
             return;
         }
         try
@@ -393,7 +393,7 @@ public sealed partial class KeranStratPlugin : BasePlugin, IPluginConfig<KeranSt
                 case "delete":
                     string deleteMap = Server.MapName, deleteName = Args(cmd, 2);
                     Background(() => { _store.Delete(deleteMap, deleteName); return true; }, _ => Notify("已删除指定战术文件。")); break;
-                default: throw new ArgumentException("未知指令，!ks 查看帮助。");
+                default: throw new ArgumentException("未知指令，输入 !ks help 查看使用方法：https://cs.jinhsi.cn/help");
             }
         }
         catch (Exception e) { _lastError = e.Message; Reply(e.Message); Log($"指令 {action} 失败: {e.GetType().Name}: {e.Message}"); }

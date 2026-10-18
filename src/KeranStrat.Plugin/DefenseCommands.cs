@@ -106,15 +106,16 @@ public sealed partial class KeranStratPlugin
     private void DefenseCommand(CCSPlayerController? player, CommandInfo cmd)
     {
         void Reply(string s) => cmd.ReplyToCommand("[KeranStrat Defense] " + s);
+        string action = cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help";
+        if (action == "help") { ReplyHelp(cmd, "ksd"); return; }
         string? id = null;
         try { if (player is { IsValid: true, IsBot: false }) id = player.AuthorizedSteamID?.SteamId64.ToString(); } catch (InvalidOperationException) { }
         if (player != null && !AccessPolicy.Allows(Config.DefenseEnabled, _defenseAllowed, id))
         { Reply("你没有权限使用 Defense 模式。"); return; }
-        string action = cmd.ArgCount > 1 ? cmd.GetArg(1).ToLowerInvariant() : "help";
+
         try
         {
-            if (action == "help")
-            { Reply("!ksd practice | exit | close | map <地图> | list | load <名称/ID> | join | leave | team | position | start | stop | status | repeat on/off | difficulty <1-4> | handoff <1-5> <毫秒/auto> | reload"); return; }
+
             if (action == "team") { DefenseTeam(Reply); return; }
             if (action == "status")
             {
@@ -212,7 +213,7 @@ public sealed partial class KeranStratPlugin
                     if (cmd.GetArg(3) != "auto") { if (!int.TryParse(cmd.GetArg(3), out int parsed)) throw new ArgumentException("交接时间为毫秒或 auto。"); ms = parsed; }
                     DefenseBotController.HandoffTicks(ms, track, _defenseTactic.TickInterval);
                     _defenseSettings.HandoffMilliseconds[role] = ms; DefenseSaveSettings(); Reply($"队员 {role} 交接：{ms?.ToString() ?? "auto"}（从自身轨迹开始计算）。"); break;
-                default: throw new ArgumentException("未知 Defense 指令，!ksd 查看帮助。");
+                default: throw new ArgumentException("未知 Defense 指令，输入 !ksd help 查看使用方法：https://cs.jinhsi.cn/help");
             }
         }
         catch (Exception e) { _defenseError = e.Message; Reply(e.Message); }
