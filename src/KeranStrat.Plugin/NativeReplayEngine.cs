@@ -82,7 +82,7 @@ internal static class Inventory
             {
                 var weapon = handle.Value;
                 if (weapon is { IsValid: true } && weapon.DesignerName.StartsWith("weapon_", StringComparison.Ordinal))
-                    items.Add(new Equipment(weapon.DesignerName, weapon.Clip1, weapon.ReserveAmmo.Length > 0 ? weapon.ReserveAmmo[0] : -1));
+                    items.Add(new Equipment(WeaponIdentity.ClassName(weapon.DesignerName, weapon.AttributeManager.Item.ItemDefinitionIndex), weapon.Clip1, weapon.ReserveAmmo.Length > 0 ? weapon.ReserveAmmo[0] : -1));
             }
         return new Track { Role = role, Initial = new(origin.X, origin.Y, origin.Z, angles.X, angles.Y, angles.Z),
             Equipment = items.ToArray(), Ammo = pawn.WeaponServices?.Ammo.ToArray() ?? [], Health = pawn.Health, Armor = pawn.ArmorValue,
@@ -95,17 +95,23 @@ internal static class Inventory
         if (track.Ammo.Length > 0 && (pawn.WeaponServices == null || track.Ammo.Length != pawn.WeaponServices.Ammo.Length))
             throw new InvalidOperationException("玩家弹药结构与战术不兼容。");
         player.RemoveWeapons();
-        foreach (var item in track.Equipment) player.GiveNamedItem(item.ClassName);
+        var equipment = WeaponIdentity.ForReplay(track);
+        foreach (var item in equipment) player.GiveNamedItem(item.ClassName);
         if (pawn.WeaponServices != null)
             foreach (var handle in pawn.WeaponServices.MyWeapons)
             {
                 var weapon = handle.Value;
                 if (weapon is not { IsValid: true }) continue;
-                var item = track.Equipment.FirstOrDefault(e => e.ClassName == weapon.DesignerName);
+                string className = WeaponIdentity.ClassName(weapon.DesignerName, weapon.AttributeManager.Item.ItemDefinitionIndex);
+                var item = equipment.FirstOrDefault(e => e.ClassName == className);
                 if (item == null) continue;
                 if (item.Clip >= 0) weapon.Clip1 = item.Clip;
                 if (item.Reserve >= 0 && weapon.ReserveAmmo.Length > 0) weapon.ReserveAmmo[0] = item.Reserve;
             }
+        foreach (var item in equipment.Where(e => e.ClassName is "weapon_m4a1_silencer" or "weapon_usp_silencer" or "weapon_cz75a" or "weapon_revolver" or "weapon_mp5sd"))
+            if (pawn.WeaponServices == null || !pawn.WeaponServices.MyWeapons.Any(h => h.Value is { IsValid: true } w &&
+                WeaponIdentity.ClassName(w.DesignerName, w.AttributeManager.Item.ItemDefinitionIndex) == item.ClassName))
+                throw new InvalidOperationException("无法恢复录制武器型号：" + item.ClassName + "；已取消回放，避免使用错误武器执行攻击。");
         if (track.Ammo.Length > 0 && pawn.WeaponServices != null)
         {
             var ammo = pawn.WeaponServices.Ammo;

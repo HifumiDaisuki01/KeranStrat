@@ -286,6 +286,31 @@ Test("KS respawn gate excludes Defense including idle lease and map transitions"
     Check(!queue.Take(player, 2, true, 101)); // Engine may still expose old team/alive state in event frame.
     Check(queue.Take(player, 3, false, 116));
 });
+Test("economy variants retain their give alias instead of a shared designer name", () =>
+{
+    foreach (var (name, definition, alias) in new[] {
+        ("weapon_m4a1", 60, "weapon_m4a1_silencer"), ("weapon_hkp2000", 61, "weapon_usp_silencer"),
+        ("weapon_p250", 63, "weapon_cz75a"), ("weapon_deagle", 64, "weapon_revolver"),
+        ("weapon_mp7", 23, "weapon_mp5sd") })
+        Check(WeaponIdentity.ClassName(name, definition) == alias);
+    Check(WeaponIdentity.ClassName("weapon_m4a1", 16) == "weapon_m4a1");
+    Check(WeaponIdentity.ClassName("weapon_ak47", 7) == "weapon_ak47");
+});
+Test("legacy M4A1-S equipment is inferred without rewriting native frames or ambiguous guns", () =>
+{
+    var track = new Track { Equipment = [new("weapon_m4a1", 17, 55), new("weapon_knife")],
+        Ticks = [new() { WeaponDefIndex = 60 }, new() { WeaponDefIndex = 42 }] };
+    var fixedItems = WeaponIdentity.ForReplay(track);
+    Check(fixedItems[0] == new Equipment("weapon_m4a1_silencer", 17, 55));
+    Check(fixedItems[1] == track.Equipment[1]);
+    Check(track.Equipment[0].ClassName == "weapon_m4a1" && track.Ticks[0].WeaponDefIndex == 60);
+    track.Ticks = [new() { WeaponDefIndex = 16 }, new() { WeaponDefIndex = 60 }];
+    Check(WeaponIdentity.ForReplay(track)[0].ClassName == "weapon_m4a1");
+    track.Ticks = [];
+    Check(WeaponIdentity.ForReplay(track)[0].ClassName == "weapon_m4a1");
+    track.Equipment = [new("weapon_m4a1_silencer", 20, 80)];
+    Check(WeaponIdentity.ForReplay(track)[0] == track.Equipment[0]);
+});
 VersusTests.Run(Test, Check, Reject, () => Fixture(), temp);
 Console.WriteLine($"RESULT: {passed} checks passed; exit={Environment.ExitCode}");
 Directory.Delete(temp, true);
